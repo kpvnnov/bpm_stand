@@ -1,4 +1,4 @@
-// $Id: timer_a.c,v 1.6 2003-05-21 16:41:22 peter Exp $
+// $Id: timer_a.c,v 1.7 2003-05-21 20:29:46 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -185,8 +185,8 @@ interrupt[TIMERA0_VECTOR] void timer_a_0 (void)
    break; //case 0
   case 1: //1400 Гц (счет таймера от SMCLK)
    //  BCSCTL2=(BCSCTL2&(~(SELM0)))|SELM1;
-   if (capture_timer>=140){
-    capture_timer-=140;
+   if (capture_timer>=70){
+    capture_timer-=70;
     if (end_adc_conversion){
      end_adc_conversion=0;
      ADC12CTL0 |= ADC12SC;                 // Start conversion

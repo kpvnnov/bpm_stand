@@ -1,5 +1,5 @@
 
-// $Id: adc.c,v 1.6 2003-05-21 16:41:22 peter Exp $
+// $Id: adc.c,v 1.7 2003-05-21 20:29:45 peter Exp $
 #include  <msp430x14x.h>
 #include "global.h"
 
@@ -56,18 +56,22 @@ void init_adc(void){
 int counter;
 void work_with_adc_put(void){
 int p;
-
- if (adc_rcv_fifo_start==adc_rcv_fifo_end) return ;
+//проверку очереди выносим на верхний круг
+// if (adc_rcv_fifo_start==adc_rcv_fifo_end) return ;
  if (counter++>=20){
   counter=0;
   put_packet_type4();
+  put_packet_type4();
+  put_packet_type4();
+  put_packet_type4();
   }
-  p=(adc_rcv_fifo_start++ & (ADC_FIFO_RCV_LEN-1))<<3;
+  p=(adc_rcv_fifo_start & (ADC_FIFO_RCV_LEN-1))<<3;
 //отладка
 //  results[p]='0';
 //  results[p]='1';
 //  results[p]='2';
 //отладка
-  put_packet_type3((u8*)&results[p]);
+  if (put_packet_type3((u8*)&results[p]))
+   adc_rcv_fifo_start++;
 
 }

@@ -1,4 +1,4 @@
-//$Id: global.h,v 1.7 2003-05-21 16:41:22 peter Exp $
+//$Id: global.h,v 1.8 2003-05-21 20:29:46 peter Exp $
 typedef unsigned char  u08;
 typedef unsigned char  u8;
 typedef          char  s08;
@@ -59,3 +59,6 @@ void init_uart1(void);
 
 
 
+//последовательный порт
+#define  SERIAL_FIFO_RCV_LEN  64           /* size of receive fifo serial buffer   */
+#define  SERIAL_FIFO_TRN_LEN  64           /* size of transmit fifo serial buffer   */

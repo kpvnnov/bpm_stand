@@ -1,5 +1,5 @@
 //********************************************************
-// $Id: msp_main.c,v 1.12 2003-05-16 19:29:08 peter Exp $
+// $Id: msp_main.c,v 1.13 2003-05-21 20:29:46 peter Exp $
 //********************************************************
 
 //#include <msp430x11x1.h>
@@ -40,11 +40,27 @@ extern time_in time_to_show;
 
 
 
-//возвращаем 1, если часовой кварц работает
+//возвращаем не ноль, если часовой кварц работает
 int test_run_LFXT1CLK(void){
-int i;
- for (i = 100; i>0; i--);           // Delay
- return 1;
+int i=10;
+unsigned int to_compare,to_compare1;
+ while(i){
+	//захватываем значение таймера
+  to_compare=TIMER_A_COUNTER;	
+	//делаем паузу
+  for (i = 100; i>0; i--);           // Delay
+	//захватываем значение таймера оп€ть
+  to_compare1=TIMER_A_COUNTER;
+	//рассчитываем разницу
+  if (to_compare1>to_compare)
+   to_compare=to_compare1-to_compare;
+  else
+   to_compare=0x2000+to_compare1-to_compare;
+	//если таймер бежит, то считаем, что кварц запустилс€
+  if (to_compare>0x100) break;
+  i--;
+  }
+ return i;
 }
 
 
@@ -189,31 +205,67 @@ void main(void)
  time_to_show=1;
  change_to_mode=0;
  time_to_change=0;
+	//запускаем таймер A и часы от него (ACLK)
+ init_timer_a();
 	//переходим на работу от часового кварца
- run_LFXT1CLK(0x02);
+	//если часовой кварц по каким-то причинам не запустилс€
+ if (!run_LFXT1CLK(0x02)){
+	//то считаем пока это аварийным режимом
+	//выключаем ноги от блока USART1
+    P3SEL &= ~0xC0;                        // P3.6,7 = USART1 option select
+    while(1){
+	//и начинаем этой ногой "мигать"
+     for (i = 3000; i>0; i--);           // Delay
+     P3OUT^=PINтакой-то;
+     for (i = 500; i>0; i--);           // Delay
+     P3OUT^=PINтакой-то;
+     }
+  }
 // init_wdt();
 
-//запускаем таймер A и часы от него
- init_timer_a();
- init_adc();
- init_uart1();
- if (current_speed==0 && power_good()  && run_xt2()){
+	//переходим на работу от второго кварца
+ if (current_speed==0 && power_good() ){
+	//если второй кварц по каким-то причинам не запустилс€
+  if (!run_xt2()){
+	//то считаем пока это аварийным режимом
+	//выключаем ноги от блока USART1
+    P3SEL &= ~0xC0;                        // P3.6,7 = USART1 option select
+    while(1){
+	//и начинаем этой ногой "мигать"
+     for (i = 1000; i>0; i--);           // Delay
+     P3OUT^=PINтакой-то;
+     }
+   }
   switch_xt2();
   }
+ init_adc();
+ init_uart1();
 
   _EINT();                              // Enable interrupts
   
   while(1)
   {
 //    BCSCTL2|=SELM0|SELM1;
-    P1OUT &= ~0x01;                     // Reset P1.0 LED off
     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
-    P1OUT |= 0x01;                      // Set P1.0 LED on
+    P1OUT &= ~0x01;                     // Reset P1.0 LED off
     tick_timer();
     work_with_display();
-    work_with_serial();
-    work_with_adc_put();
-//    P1OUT &= ~0x01;                     // Reset P1.0 LED off
+
+    //-----------------
+    // работа с последовательным портом
+    //-----------------
+    if (packet_in_fifo&&(fifo_trn_depth<(SERIAL_FIFO_TRN_LEN/2)))
+     work_with_serial();
+    //-----------------
+
+    //-----------------
+    // работа с данными из ј÷ѕ
+    //-----------------
+    if (adc_rcv_fifo_start!=adc_rcv_fifo_end) 
+     work_with_adc_put();
+    //-----------------
+
+    P1OUT |= 0x01;                      // Set P1.0 LED on
   }
 
 }

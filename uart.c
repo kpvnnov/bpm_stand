@@ -1,4 +1,4 @@
-// $Id: uart.c,v 1.9 2003-05-21 16:41:22 peter Exp $
+// $Id: uart.c,v 1.10 2003-05-21 20:29:46 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -30,8 +30,6 @@ _____
 0x03      пакет данных ЭКГ
 */
 
-#define  SERIAL_FIFO_RCV_LEN  64           /* size of receive fifo serial buffer   */
-#define  SERIAL_FIFO_TRN_LEN  64           /* size of transmit fifo serial buffer   */
 #define  MAXQUE 8		//длина очереди пакетов
 #define  MAXPACKETLEN	64	//максимальная длина одного пакета
 #define  CRCPACKET	2	//смещение (с конца) положения в пакете CRC
@@ -140,7 +138,10 @@ u8 put_packet_type3(u8 *info){
 int n;
 int crc;
 	//захватываем свободный пакет
- while ((n=hold_packet())==MAXQUE) ; 
+ if ((n=hold_packet())==MAXQUE) return 0; //свободных пакетов нет
+ #ifdef DEBUG_SERIAL
+ packet_in_fifo++;
+ #endif DEBUG_SERIAL
 	//копируем туда данные для пакета
  memcpy(&packets[(n+1)*MAXPACKETLEN-DATA3PACKET],info,SIZEDATA3); 
 	//помещаем в пакет его длину (без завершающего EOFPACKET)
@@ -163,7 +164,17 @@ return 1;
 u8 put_packet_type4(void){
 int n;
 int crc;
- while ((n=hold_packet())==MAXQUE) ; //захватываем свободный пакет
+	//захватываем свободный пакет
+ if ((n=hold_packet())==MAXQUE) {
+  #ifdef DEBUG_SERIAL
+  packet_fifo_full++;
+  #endif DEBUG_SERIAL
+  return 0; //свободных пакетов нет
+  }
+ #ifdef DEBUG_SERIAL
+ packet_in_fifo++;
+ #endif DEBUG_SERIAL
+
  packets[(n+1)*MAXPACKETLEN-11]='0';
  packets[(n+1)*MAXPACKETLEN-10]='9';
  packets[(n+1)*MAXPACKETLEN-9]='8';
@@ -184,29 +195,45 @@ return 1;
 
 
 //u8 test[4]={'0','1','2','3'};
+u16 last_sended_packet;
 void work_with_serial(void){
-u16 ostatok;
 int x;
-u8* data;
-u16 len;
-for (x=0;x<MAXQUE;x++){
- switch(queue[x].busy){
-  case NOTSENDED:
-//отладка   queue[x].busy=WAIT_ACK;
-   queue[x].busy=FREEPLACE; 	//для отладки
-   data=&packets[(x+1)*MAXPACKETLEN-queue[x].len];
-   len=queue[x].len;
-	//посылаем (с ожиданием) весь пакет
-   while ( (ostatok=send_serial_massiv(data,len))!=0) {
-    data+=(len-ostatok);
-    len=ostatok;
-    }
+ for (x=0;x<MAXQUE;x++){
+  if (last_sended_packet<MAXQUE) break;
+  switch(queue[x].busy){
+   case NOTSENDED:
+    last_sended_packet=x;
+    break;
+   }//hctiws
+  }//rof
+ if (last_sended_packet<MAXQUE){
+  x=last_sended_packet;
+	//посылаем (сколько в фифошку поместится) пакет
+  queue[x].len=send_serial_massiv(&packets[(x+1)*MAXPACKETLEN-queue[x].len],queue[x].len);
+	//если все отправили
+  if (queue[x].len==0){
 	//высылаем маркер конца пакета
    while (write_asp_trn_fifo(EOFPACKET)==0) ;
-   return;
-//   break;
-  }
- }
+	//помечаем пакет отмеченным или ожидающем подтверждения
+	//отладка   queue[x].busy=WAIT_ACK;
+
+    //для отладки
+    queue[x].busy=FREEPLACE; 	
+    #ifdef DEBUG_SERIAL
+    packet_in_fifo--;
+    #endif DEBUG_SERIAL
+    //для отладки
+
+	//ищем следующий пакет в очереди на отправку
+    while((++last_sended_packet)<MAXQUE){
+     switch(queue[last_sended_packet].busy){
+	//найден неотправленный пакет
+      case NOTSENDED:
+       return;
+      }
+     }//elihw дошли до конца очереди - пакетов на отправку нет
+   }//fi - текущий пакет отправлен еще не до конца
+  }fi - пока нет пакетов для отправки
 }
 
 
@@ -239,7 +266,13 @@ int x;
   IE2 |= URXIE1;			// Enable USART1 RX+TX interrupt
 //+ UTXIE1;                
   for (x=0;x<MAXQUE;x++) queue[x].busy=FREEPLACE;
-
+  last_sended_packet=MAXQUE;
+ #ifdef DEBUG_SERIAL
+  fifo_trn_depth_max=0;
+  fifo_trn_depth=0;
+  packet_in_fifo=0;
+  packet_fifo_full=0;
+ #endif
 }
 
 
@@ -250,8 +283,16 @@ int x;
 interrupt[UART1TX_VECTOR] void usart1_tx (void)
 {
  TXBUF1 = asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
- if (asp_trn_fifo_start==asp_trn_fifo_end) // если данных больше нет
+ #ifdef DEBUG_SERIAL
+  if (fifo_trn_depth_max<fifo_trn_depth) fifo_trn_depth_max=fifo_trn_depth;
+  fifo_trn_depth--;
+ #endif
+ if (asp_trn_fifo_start==asp_trn_fifo_end){ // если данных больше нет
   IE2 &= ~UTXIE1;                          // то запрещаем прерыв. передачи
+  #ifdef DEBUG_SERIAL
+  if (fifo_trn_depth) error_uart_depth++;
+  #endif
+  }
 }
 interrupt[UART1RX_VECTOR] void usart0_rx (void)
 {
@@ -300,6 +341,13 @@ u16 counter;
 u16 counter1;
 u16 t_end;
 u16 t_start;
+
+#ifdef DEBUG_SERIAL
+  if (len==0){
+   error_send_serial++;
+   return 0;
+   }
+#endif
 // do {
   t_end=  asp_trn_fifo_end&(SERIAL_FIFO_TRN_LEN-1);
   t_start=asp_trn_fifo_start&(SERIAL_FIFO_TRN_LEN-1);
@@ -318,15 +366,25 @@ u16 t_start;
    if (escape_sym){
     escape_sym=0;
     asp_trn_fifo_buf[t_end++]=(*data++)^0x40;
+    #ifdef DEBUG_SERIAL
+     fifo_trn_depth++;
+    #endif
     }
    else
     if (*data==EOFPACKET||*data==ESCAPE){
      escape_sym=1;
      asp_trn_fifo_buf[t_end++]=ESCAPE;
+     #ifdef DEBUG_SERIAL
+      fifo_trn_depth++;
+     #endif
      len++;
      }
-    else
+    else{
      asp_trn_fifo_buf[t_end++]=*data++;
+     #ifdef DEBUG_SERIAL
+      fifo_trn_depth++;
+     #endif
+     }
    counter--;
    }
   len-=counter1;
@@ -352,6 +410,9 @@ u8 write_asp_trn_fifo(u8 data_wr){
   return 0;
  disable_int_no_interrupt();
  asp_trn_fifo_buf[asp_trn_fifo_end++ & (SERIAL_FIFO_TRN_LEN-1)]=data_wr;
+ #ifdef DEBUG_SERIAL
+  fifo_trn_depth++;
+ #endif
  IE2 |= UTXIE1;		// данные в фифошке есть - разрешаем прерывания передачи
  enable_int_no_interrupt();
  return 1;
