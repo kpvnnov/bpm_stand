@@ -1,10 +1,19 @@
 //********************************************************
-// $Id: msp_main.c,v 1.26 2003-11-03 17:01:48 peter Exp $
+// $Id: msp_main.c,v 1.27 2004-03-07 21:31:50 peter Exp $
 //********************************************************
 
 //#include <msp430x11x1.h>
 //#include  <msp430x13x.h>
 #include  <msp430x14x.h>
+
+//типы переменных
+#include "type_def.h"
+
+
+#ifdef STEND
+#include "uart_s.h"
+#endif // STEND
+
 #include "global.h"
 #include "change.log"
 

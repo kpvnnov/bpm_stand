@@ -1,6 +1,14 @@
-// $Id: timer_a.c,v 1.17 2003-06-06 13:34:58 peter Exp $
+// $Id: timer_a.c,v 1.18 2004-03-07 21:31:50 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
+
+//типы переменных
+#include "type_def.h"
+
+#ifdef STEND
+#include "uart_s.h"
+#endif // STEND
+
 #include "global.h"
 
 extern u16 temp_hold;

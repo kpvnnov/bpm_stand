@@ -1,4 +1,4 @@
-//$Id: global.h,v 1.25 2003-11-03 17:01:48 peter Exp $
+//$Id: global.h,v 1.26 2004-03-07 21:31:50 peter Exp $
 
 
 #define DEBUG_SERIAL
@@ -9,24 +9,9 @@
 
 //#define DISPLAY
 
-//Є®«ЁзҐбвў® Є ­ «®ў ў ¬г«мвЁЇ«ҐЄбЁа®ў ­­®¬ аҐ¦Ё¬Ґ
-#define  NUM_MULTICHANNEL 8
 
 
 
-typedef unsigned char  u08;
-typedef unsigned char  u8;
-typedef          char  s08;
-typedef unsigned short u16;
-typedef          short s16;
-typedef unsigned long  u32;
-typedef          long  s32;
-
-typedef long time_in ;
-
-
-#define disable_int_no_interrupt() _DINT()
-#define enable_int_no_interrupt() _EINT()
 
 
 //таймер
@@ -94,15 +79,10 @@ void set_adc_temperature(void);
 //последовательный порт
 //#define  SERIAL_FIFO_RCV_LEN  8           /* size of receive fifo serial buffer   */
 #define  SERIAL_FIFO_TRN_LEN  64           /* size of transmit fifo serial buffer   */
-#define  MAXPACKETLEN	76	//максимальная длина одного пакета - ДОЛЖНА БЫТЬ четной!
-#if NUM_MULTICHANNEL
+
+// ????????? #if NUM_MULTICHANNEL
 
 
-//статистика
-#define STAT_FIFO_RCV_LEN	8           /* size of fifo STAT buffer   */
-#define STAT1_FIFO_RCV_LEN	8           /* size of fifo STAT buffer   */
-#define SIZE_STAT	9
-#define SIZE_STAT1	10
 
 #define  ALL_JOB	0
 #define  DISPLAY_JOB	1

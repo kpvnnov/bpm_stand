@@ -1,6 +1,10 @@
 
-// $Id: adc.c,v 1.13 2003-06-06 13:34:58 peter Exp $
+// $Id: adc.c,v 1.14 2004-03-07 21:31:50 peter Exp $
 #include  <msp430x14x.h>
+
+//типы переменных
+#include "type_def.h"
+
 #include "global.h"
 
 extern u16 temp_hold;

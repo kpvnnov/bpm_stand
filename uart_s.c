@@ -1,7 +1,16 @@
-// $Id: uart_s.c,v 1.12 2003-11-03 17:01:49 peter Exp $
+// $Id: uart_s.c,v 1.13 2004-03-07 21:31:50 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
+
+//типы переменных
+#include "type_def.h"
+
+
 #include "global.h"
+#include "uart_s.h"
+
+// "inline" функции для 149 процессора
+#include "m149.h"
 
 
 #define STEND_N 2
@@ -291,7 +300,6 @@ _________________________________________________________________
 */
 
 
-#define  MAXQUE 8		//длина очереди пакетов
 #define  CRCPACKET	2	//смещение (с конца) положения в пакете CRC
 #define  LENPACKET	3	//смещение (с конца) положения в пакете длины пакета
 #define  TYPEPACKET     4	//смещение (с конца) положения в пакете типа пакета
@@ -302,18 +310,6 @@ _________________________________________________________________
 #define  LEVEL_SET	8	//значение данных в 3-х байтовом пакете
 #define  REGIM_JOB	6	//установка режимов работы
 
-#define  DATA3PACKET    24	//смещение (с конца) положения в пакете размещения данных
-#define  DATA5PACKET     (SIZE_STAT*2+6)
-#define  DATA6PACKET     (SIZE_STAT1*2+6)
-#define  DATA7PACKET     (32+6)
-//#define  DATAxAPACKET    (2+4*NUM_MULTICHANNEL+2+6)
-//убрал температуру из пакета
-#define  DATAxAPACKET    (2+4*NUM_MULTICHANNEL+6)
-#define  DATA19PACKET    (2+6)
-#define  DATA1APACKET	 (6*2+6)
-#if DATAxAPACKET>=MAXPACKETLEN
- error size of fifo packets MAXPACKETLEN
-#endif
 #define  ESCAPE		0x7D
 #define  EOFPACKET	0x7E	//код признака конца кадра
 extern volatile unsigned int  asp_trn_fifo_start;      /* serial transmit buffer start index      */
