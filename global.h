@@ -1,4 +1,4 @@
-//$Id: global.h,v 1.23 2003-10-15 16:07:57 peter Exp $
+//$Id: global.h,v 1.24 2003-10-17 13:15:44 peter Exp $
 
 
 #define DEBUG_SERIAL
@@ -10,7 +10,7 @@
 //#define DISPLAY
 
 //Є®«ЁзҐбвў® Є ­ «®ў ў ¬г«мвЁЇ«ҐЄбЁа®ў ­­®¬ аҐ¦Ё¬Ґ
-#define  NUM_MULTICHANNEL 11
+#define  NUM_MULTICHANNEL 8
 
 
 
@@ -52,6 +52,7 @@ void tick_timer(void);
 
 // АЦП
 void init_adc(void);	//инициализация АЦП
+void off_adc(void);	//выключение АЦП
 #define  ADC_FIFO_RCV_LEN  8           /* size of fifo ADC buffer   */
 #define  SIZE_OF_ADC_DUMP  8
 #define  NUM_CHANEL 32
@@ -91,7 +92,7 @@ void set_adc_temperature(void);
 //последовательный порт
 //#define  SERIAL_FIFO_RCV_LEN  8           /* size of receive fifo serial buffer   */
 #define  SERIAL_FIFO_TRN_LEN  64           /* size of transmit fifo serial buffer   */
-#define  MAXPACKETLEN	56	//максимальная длина одного пакета
+#define  MAXPACKETLEN	76	//максимальная длина одного пакета - ДОЛЖНА БЫТЬ четной!
 #if NUM_MULTICHANNEL
 
 
@@ -99,7 +100,7 @@ void set_adc_temperature(void);
 #define STAT_FIFO_RCV_LEN	8           /* size of fifo STAT buffer   */
 #define STAT1_FIFO_RCV_LEN	8           /* size of fifo STAT buffer   */
 #define SIZE_STAT	9
-#define SIZE_STAT1	9
+#define SIZE_STAT1	10
 
 #define  ALL_JOB	0
 #define  DISPLAY_JOB	1

@@ -1,4 +1,4 @@
-// $Id: timer_s.c,v 1.7 2003-10-15 16:07:58 peter Exp $
+// $Id: timer_s.c,v 1.8 2003-10-17 13:15:44 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -16,6 +16,9 @@ extern u16 timer_sum_stat;
 extern u16 timer_diff_min;
 extern u16 timer_diff_max;
 extern u16 why_job;
+
+
+extern u16 stop_transmit;
 
 
 extern unsigned int current_level;
@@ -36,6 +39,9 @@ extern u16 error_send_serial;
 extern u16 length_sended_2_fifo_max;
 extern u16 length_sended_2_fifo_min;
 extern u16 error_packets_crc;
+extern u16 jitter_adc_max;
+extern u16 jitter_adc;
+extern u16 jitter_pusk;
 #endif //DEBUG_SERIAL
 
 
@@ -299,7 +305,12 @@ HOLD_TIME_IRQ()
      //для1800 Гц необходим делитель   512        
      //для2000 Гц необходим делитель   460,8
      //для2200 Гц необходим делитель   418,9
-     //для2400 Гц необходим делитель   384
+     //для2400 Гц необходим делитель   384	- 12 преобразований (11 каналов)
+     //для2600 Гц необходим делитель   354.46   - 13 преобразований (12 каналов)
+     //для2800 Гц необходим делитель   329.14   - 14 преобразований (13 каналов)
+     //для3000 Гц необходим делитель   307.2   	- 15 преобразований (14 каналов)
+     //для3200 Гц необходим делитель   288   	- 16 преобразований (15 каналов)
+     //для3400 Гц необходим делитель   271.06  	- 17 преобразований (16 каналов)
     switch(mode_timer){                        
      case 0: //(cчет таймера от ACLK)
       //пока ничего не делаем
@@ -310,26 +321,42 @@ HOLD_TIME_IRQ()
       #endif
       #ifdef STEND
       if (chanel_convert&0x40){ //"серийное" преобразование каналов
-       #if   (NUM_MULTICHANNEL == 2) //два канала+температура*200Гц=600Гц
-        CCR1 += (1536);
+//  jitter_adc=TAR;
+//  if (CCR1>jitter_adc) jitter_adc=CCR1-jitter_adc; else jitter_adc=jitter_adc-CCR1;
+//  if (jitter_adc_max<jitter_adc) jitter_adc_max=jitter_adc;
+
+       #if   (NUM_MULTICHANNEL == 2) //два канала*200Гц=400Гц
+        CCR1 += (2304);
        #elif (NUM_MULTICHANNEL == 3)
+        CCR1 += (1536);
+       #elif (NUM_MULTICHANNEL == 4)
         CCR1 += (1152);
-       #elif NUM_MULTICHANNEL==4
-        CCR1 += (922);
        #elif NUM_MULTICHANNEL==5
-        CCR1 += (768);
+        CCR1 += (922);          
        #elif NUM_MULTICHANNEL==6
-        CCR1 += (658);
+        CCR1 += (768);
        #elif NUM_MULTICHANNEL==7
-        CCR1 += (576);
+        CCR1 += (658);
        #elif NUM_MULTICHANNEL==8
-        CCR1 += (512);
+        CCR1 += (576);
        #elif NUM_MULTICHANNEL==9
-        CCR1 += (461);
+        CCR1 += (512);
        #elif NUM_MULTICHANNEL==10
-        CCR1 += (419);
+        CCR1 += (461);
        #elif NUM_MULTICHANNEL==11
+        CCR1 += (419);
+       #elif NUM_MULTICHANNEL==12
         CCR1 += (384);
+       #elif NUM_MULTICHANNEL==13
+        CCR1 += (355);
+       #elif NUM_MULTICHANNEL==14
+        CCR1 += (329);
+       #elif NUM_MULTICHANNEL==15
+        CCR1 += (307);
+       #elif NUM_MULTICHANNEL==16
+        CCR1 += (288);
+       #elif NUM_MULTICHANNEL==17
+        CCR1 += (271);
        #else
         error defined NUM_MULTICHANNEL
 //        CCR1 += (NUM_MULTICHANNEL);
@@ -340,19 +367,22 @@ HOLD_TIME_IRQ()
       #endif
       if (end_adc_conversion){
        end_adc_conversion=0;
+       jitter_pusk=TAR;
+//       ADC12CTL0 |= ADC12SC;                 // Start conversion
        if (chanel!=chanel_convert){
         chanel_convert=chanel;
         first_channel=chanel_convert;
         rotate_channel=0;
         set_adc(chanel_convert);
+        ADC12CTL0 |= ADC12SC;                 // Start conversion
         }
        else
        if ( ((chanel_convert&0x40)==0) &&
             (dac[chanel_convert&((NUM_CHANEL>>1)-1)]&0x8000) ){
         dac[chanel_convert&((NUM_CHANEL>>1)-1)]&=0x7FFF;
         set_adc(chanel_convert);
+        ADC12CTL0 |= ADC12SC;                 // Start conversion
         }
-       ADC12CTL0 |= ADC12SC;                 // Start conversion
        switch(what_doing){
         case NO_JOB:
          break;
@@ -459,7 +489,8 @@ HOLD_TIME_IRQ()
     *t_stat++=timer_diff_max;
     timer_diff_max=0;
 
-    stat_rcv_fifo_end++;
+    if (stop_transmit==0)
+     stat_rcv_fifo_end++;
     _BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
     #ifdef CABLE
      P1OUT = temp_led;                     // return led state
@@ -494,9 +525,14 @@ HOLD_TIME_IRQ()
 
     *t_stat++=packet_in_fifo_max;
     packet_in_fifo_max=0;
+
     *t_stat++=error_packets_crc;
 
-    stat1_rcv_fifo_end++;
+    *t_stat++=jitter_adc_max;
+    jitter_adc_max=0;
+
+    if (stop_transmit==0)
+     stat1_rcv_fifo_end++;
 
     #ifdef CABLE
      P1OUT = temp_led;                     // return led state

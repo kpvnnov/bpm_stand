@@ -1,5 +1,5 @@
 
-// $Id: adc_s.c,v 1.7 2003-10-15 12:23:15 peter Exp $
+// $Id: adc_s.c,v 1.8 2003-10-17 13:15:42 peter Exp $
 #include  <msp430x14x.h>
 #include "global.h"
 
@@ -14,6 +14,12 @@ extern u16 timer_sum_serial;
 extern u16 timer_sum_adc;
 extern u16 timer_sum_stat;
 extern u16 why_job;
+extern u16 jitter_adc;
+extern u16 jitter_adc_max;
+extern u16 jitter_pusk;
+
+extern u16 stop_transmit;
+
 
 //unsigned int results0[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
 //unsigned int results1[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
@@ -26,8 +32,8 @@ extern u16 why_job;
 unsigned int results[ADC_FIFO_RCV_LEN];
 unsigned int one_count0[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
 unsigned int one_count1[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
-unsigned int multi_count0[NUM_MULTICHANNEL+1][ADC_FIFO_RCV_LEN];
-unsigned int multi_count1[NUM_MULTICHANNEL+1][ADC_FIFO_RCV_LEN];
+unsigned int multi_count0[NUM_MULTICHANNEL][ADC_FIFO_RCV_LEN];
+unsigned int multi_count1[NUM_MULTICHANNEL][ADC_FIFO_RCV_LEN];
                                         
 unsigned int current_level;
 unsigned int what_doing;
@@ -63,6 +69,16 @@ int sh;
 unsigned int sum,sum1;
 HOLD_TIME_IRQ()
  end_adc_conversion=1;
+  jitter_adc=CCR1-TAR;
+  if (jitter_adc_max<jitter_adc) jitter_adc_max=jitter_adc;
+
+//    jitter_adc_max++;
+
+//  jitter_adc=TAR;
+//  if (jitter_pusk>jitter_adc) jitter_adc=jitter_pusk-jitter_adc; 
+//   else jitter_adc=jitter_adc-jitter_pusk;
+//  if (jitter_adc_max<jitter_adc) jitter_adc_max=jitter_adc;
+
  if (chanel_convert&0x40){
   sh=(adc_rcv_fifo_end & (ADC_FIFO_RCV_LEN-1));
 
@@ -96,24 +112,28 @@ HOLD_TIME_IRQ()
     rotate_channel++;
 
 
-  if (rotate_channel==(NUM_MULTICHANNEL)){ //для следующего цикла устанавливаем температуру
-   set_adc_temperature(); //температура будет суммой sum и sum1
-   SUM_TIME_IRQ_NOSLEEP();
-   }
-  else
-  if (rotate_channel==(NUM_MULTICHANNEL+1)){ //для следующего цикла устанавливаем цикл с начала
+//  if (rotate_channel==(NUM_MULTICHANNEL)){ //для следующего цикла устанавливаем температуру
+//   set_adc_temperature(); //температура будет суммой sum и sum1
+//   SUM_TIME_IRQ_NOSLEEP();
+//   }
+//  else
+  if (rotate_channel==(NUM_MULTICHANNEL)){ //для следующего цикла устанавливаем цикл с начала
     // и выставляем данные для занесения в очередь передачи
    results[sh]=0x8000|(first_channel&0x1F);
-   adc_rcv_fifo_end++;
+   if (stop_transmit==0)
+    adc_rcv_fifo_end++;
    rotate_channel=0;
    set_adc((first_channel&0xC0)+((first_channel+rotate_channel)&0x3F));
+   ADC12CTL0 |= ADC12SC;                 // Start conversion
    _BIC_SR_IRQ(CPUOFF);               // Clear LPM0, SET BREAKPOINT HERE
    SUM_TIME_IRQ();
    }
   else { //обычный цикл для следующего канала
    set_adc((first_channel&0xC0)+((first_channel+rotate_channel)&0x3F));
+   ADC12CTL0 |= ADC12SC;                 // Start conversion
    SUM_TIME_IRQ_NOSLEEP();
    }
+  
   }
  else{ //"обыкновенный" парный режим
   sh=(adc_rcv_fifo_end & (ADC_FIFO_RCV_LEN-1))*SIZE_OF_ADC_DUMP;
@@ -137,8 +157,10 @@ HOLD_TIME_IRQ()
   one_count1[sh++] = ADC12MEM15;               
 
   results[adc_rcv_fifo_end & (ADC_FIFO_RCV_LEN-1)]=chanel_convert&0x1F;
-  adc_rcv_fifo_end++;
+  if (stop_transmit==0)
+   adc_rcv_fifo_end++;
 
+  ADC12CTL0 |= ADC12SC;                 // Start conversion
   _BIC_SR_IRQ(CPUOFF);               // Clear LPM0, SET BREAKPOINT HERE
   SUM_TIME_IRQ();
  }
@@ -156,20 +178,24 @@ void init_adc(void){
         //SHT1_xx - Sample-and-hold time. These bits define the number 
 	//	    of ADC12CLK cycles in the sampling period for 
 	//	    registers ADC12MEM8 to ADC12MEM15
-  ADC12CTL0 = ADC12ON+REFON+MSC+SHT0_8+SHT1_8;    // Turn on ADC12, set sampling time
+  ADC12CTL0 = ADC12ON+REFON+MSC+SHT0_6+SHT1_6;    // Turn on ADC12, set sampling time
+//ADC12CLK=3 686 400
+//SHT0_8 t_sample=4*ADC12CLK*64=14400 Гц    0.00006944
+
 //REF2_5V
 	//ADC12 SSELx Bits 4-3
 	//	ADC12 clock source select
 	//	00 ADC12OSC
 	//	01 ACLK
 	//	10 MCLK
-	//	11 SMCLK
+	//	11 SMCLK -ADC12SSEL_3
 	//SHS bits 10-11 Source select for the sample-input signal.
 	//0: Control bit ADC12SC is selected.
 	//1: Timer_A.OUT1
 	//2: Timer_B.OUT0
 	//3: Timer_B.OUT1
   ADC12CTL1 = ADC12SSEL_3+ADC12DIV_1+SHP+CONSEQ_1+SHS_1;             // Use sampling timer, single sequence
+// ADC12DIV_1 - деление на 2
 	//SREFx Bits 6-4 Select reference
 	//	000 VR+ = A VCC 	and VR- = A VSS - от 0 до питания
 	//	001 VR+ = V REF+ 	and VR- = A VSS - от 0 до внутр. опорн.
@@ -207,6 +233,15 @@ void init_adc(void){
 // dac[0]=0x800;
 
 }
+
+void off_adc(void){
+int z;
+ADC12CTL0=0;
+ADC12CTL0=0;
+z=ADC12MEM15;
+
+}
+
 
 int counter;
 u16 work_with_adc_put(void){
@@ -309,7 +344,7 @@ void set_adc(int ch){
    break;
   }//свитч
  if (ch&0x80){ //резервный канал
-  ADC12MCTL0 = INCH_1+SREF_2;           // ref+=Ve REF,  channel = A0
+  ADC12MCTL0 = INCH_1+SREF_2;           // ref+=Ve REF,  channel = A1
   ADC12MCTL2 = INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
   ADC12MCTL4 = INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
   ADC12MCTL6 = INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
@@ -319,15 +354,16 @@ void set_adc(int ch){
   ADC12MCTL14= INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
   }
  else{// основной канал
-  ADC12MCTL0 = INCH_7+SREF_2;           // ref+=Ve REF,  channel = A0
-  ADC12MCTL2 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A1
-  ADC12MCTL4 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A1
-  ADC12MCTL6 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A1
-  ADC12MCTL8 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A1
-  ADC12MCTL10= INCH_7+SREF_2;           // ref+=Ve REF+, channel = A1
-  ADC12MCTL12= INCH_7+SREF_2;           // ref+=Ve REF+, channel = A1
-  ADC12MCTL14= INCH_7+SREF_2;           // ref+=Ve REF+, channel = A1
+  ADC12MCTL0 = INCH_7+SREF_2;           // ref+=Ve REF,  channel = A7
+  ADC12MCTL2 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
+  ADC12MCTL4 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
+  ADC12MCTL6 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
+  ADC12MCTL8 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
+  ADC12MCTL10= INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
+  ADC12MCTL12= INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
+  ADC12MCTL14= INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
   }
  ADC12IE = 1<<15;                       // Enable ADC12IFG.3
+// ADC12IE = 1<<7;                       // Enable ADC12IFG.3
  ADC12CTL0 |= ENC;                     // Enable conversions
 }

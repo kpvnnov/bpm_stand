@@ -1,4 +1,4 @@
-// $Id: uart_s.c,v 1.9 2003-10-15 16:07:58 peter Exp $
+// $Id: uart_s.c,v 1.10 2003-10-17 13:15:44 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -15,6 +15,8 @@ extern u16 timer_sum_adc;
 extern u16 timer_sum_stat;
 extern u16 why_job;
 
+u16 stop_transmit;
+extern u16 chanel_convert;
 
 extern unsigned int current_level;
 extern unsigned int what_doing;
@@ -58,8 +60,8 @@ extern u16 received_packed;
 
 extern unsigned int one_count0[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
 extern unsigned int one_count1[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
-extern unsigned int multi_count0[NUM_MULTICHANNEL+1][ADC_FIFO_RCV_LEN];
-extern unsigned int multi_count1[NUM_MULTICHANNEL+1][ADC_FIFO_RCV_LEN];
+extern unsigned int multi_count0[NUM_MULTICHANNEL][ADC_FIFO_RCV_LEN];
+extern unsigned int multi_count1[NUM_MULTICHANNEL][ADC_FIFO_RCV_LEN];
 
 
 
@@ -255,6 +257,11 @@ _________________________________________________________________
           в пакете 1 байт 
             0 бит - включение напряжения на датчиках
             1 бит - включение напряжения на аналоговой части
+            2 бит - выключение преобразования АЦП
+            3 бит - включение преобразования АЦП
+            4 бит - выключение UART
+            5 бит - включение UART
+
     общее количество данных 1 байт
 
 */
@@ -275,7 +282,9 @@ _________________________________________________________________
 #define  DATA5PACKET     (SIZE_STAT*2+6)
 #define  DATA6PACKET     (SIZE_STAT1*2+6)
 #define  DATA7PACKET     (32+6)
-#define  DATAxAPACKET    (2+4*NUM_MULTICHANNEL+2+6)
+//#define  DATAxAPACKET    (2+4*NUM_MULTICHANNEL+2+6)
+//убрал температуру из пакета
+#define  DATAxAPACKET    (2+4*NUM_MULTICHANNEL+6)
 
 #if DATAxAPACKET>=MAXPACKETLEN
  error size of fifo packets MAXPACKETLEN
@@ -526,7 +535,7 @@ u16* t_p;
   *t_p++=multi_count0[z][info];
   *t_p++=multi_count1[z][info];
   }
- *t_p++=multi_count0[NUM_MULTICHANNEL][info]+multi_count1[NUM_MULTICHANNEL][info]; //температура
+// *t_p++=multi_count0[NUM_MULTICHANNEL][info]+multi_count1[NUM_MULTICHANNEL][info]; //температура
 
 	//помещаем в пакет его длину (без завершающего EOFPACKET)
  packets[shift_fifo-LENPACKET]=DATAxAPACKET;
@@ -606,10 +615,42 @@ u16 shift_fifo;
        P4OUT&=~BIT6;
       else
        P4OUT|=BIT6;
+
       if (packets[shift_fifo-REGIM_JOB]&0x02) //напряжения на аналоговой части
        P1OUT&=~BIT0;
       else
        P1OUT|=BIT0;
+
+      if (packets[shift_fifo-REGIM_JOB]&0x04){ //выключить АЦП
+       disable_int_no_interrupt();
+       chanel_convert&=~0x40; //выключаем пакетный режим
+       off_adc();
+       enable_int_no_interrupt();
+       }
+
+      if (packets[shift_fifo-REGIM_JOB]&0x08){ //включить АЦП
+       disable_int_no_interrupt();
+       init_adc();
+       enable_int_no_interrupt();
+       }
+      if (packets[shift_fifo-REGIM_JOB]&0x10){ //выключить UART
+       disable_int_no_interrupt();
+       P3SEL &= ~BIT4;                        // выключаем в ноль передачу USART0
+       stop_transmit=1;
+       //  P3DIR = 0xFF;                         // All P3.x outputs
+       //  P3OUT = 0;                            // All P3.x reset
+       enable_int_no_interrupt();
+       }
+      if (packets[shift_fifo-REGIM_JOB]&0x20){ //включить UART
+       disable_int_no_interrupt();
+       P3SEL |= BIT4;                        // включаем в ноль передачу USART0
+       stop_transmit=0;
+       //  P3DIR = 0xFF;                         // All P3.x outputs
+       //  P3OUT = 0;                            // All P3.x reset
+       enable_int_no_interrupt();
+       }
+
+
       break;
      }
     //отправить подтверждение, если это не 0x01 тип пакета
@@ -712,6 +753,7 @@ int x;
   for (x=0;x<MAXQUE;x++) queue[x].busy=FREEPLACE;
   last_sended_packet=MAXQUE;
   current_rec_packet=0;
+  stop_transmit=0;
   rec_length=0;
   queue[0].busy=PACKBUSY;
  #ifdef DEBUG_SERIAL
@@ -719,6 +761,7 @@ int x;
   fifo_trn_depth=0;
   packet_in_fifo=0;
   packet_fifo_full=0;
+  error_packets_crc=0;
  #endif
   received_packed=0;
 #endif //STEND

@@ -1,4 +1,4 @@
-// $Id: uart.c,v 1.22 2003-10-15 16:07:58 peter Exp $
+// $Id: uart.c,v 1.23 2003-10-17 13:15:44 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -36,6 +36,9 @@ u16 length_sended_2_fifo;
 u16 length_sended_2_fifo_max;
 u16 length_sended_2_fifo_min;
 u16 error_packets_crc;
+u16 jitter_adc;
+u16 jitter_adc_max;
+u16 jitter_pusk;
 #endif //DEBUG_SERIAL
 
 u16 current_rec_packet;
