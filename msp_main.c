@@ -33,9 +33,12 @@ static unsigned int results[4];         // Needs to be global in this example
                                         // Otherwise, the compiler removes it
                                         // because it is not used for anything.
 
+int gradus_to_show;
 
 //инициализация SPI1
-void init_spi1_master(void){
+//regim 0x01 - ACLK, иначе SMCLK
+// 
+void init_spi1_master(int regim){
 
  ME2=USPIE1; //включаем SPI
 
@@ -78,7 +81,7 @@ void init_spi1_master(void){
 // shown in Figure 13-17.
 // CKPH = 0: Normal UCLK clocking scheme
 // CKPH = 1: UCLK is delayed by one half cycle
- UTCTL1=CKPH|SSEL0|STC;
+ UTCTL1=CKPH|STC|(regim&0x01 ? SSEL0:SSEL0|SSEL1);
 
 
 // Bit 0: The USART state machines and operating flags are initialized
@@ -121,6 +124,7 @@ void init_spi1_master(void){
 int symbl[4];
 int displ[4];
 const char symbols[]={
+                //                                 GFEDCBA
       	0x3F,	// 0 Описание символа 0           00111111    A
 	0x06,	// 1 Описание символа 1           00000110  F   B
 	0x5B,   // 2 Описание символа 2           01011011    G
@@ -131,19 +135,20 @@ const char symbols[]={
 	0x07,   // 7 Описание символа 7           00000111
 	0x7F,   // 8 Описание символа 8           01111111
 	0x6F,   // 9 Описание символа 9           01101111
-	0x00,   // A Описание символа "Пустота"   00000000
-	0x01,   // B Описание символа (верх.тире) 00000001
-	0x40,   // C Описание символа (сред.тире) 01000000
-	0x08,   // D Описание символа (нижн.тире) 00001000
-	0x73,   // E Описание символа P           01110011
-	0x79,   // F Описание символа E           01111001
-	0x3F,   //10 Описание символа O           00111111
-	0x76,   //11 Описание символа E           01110110
-	0x71,   //12 Описание символа F           01110001
-	0x38,   //13 Описание символа F           00111000
-	0x37,   //14 Описание символа П           00110111
-	0x77,   //15 Описание символа А           01110111
-	0x6E   //16 Описание символа У           01101110
+	0x77,   // A Описание символа А           01110111
+	0x7C,   // B Описание символа b           01111100
+	0x39,   // C Описание символа C           00111001
+	0x5E,   // D Описание символа d           01011110
+	0x79,   // E Описание символа E           01111001
+	0x71,   // F Описание символа F           01110001
+	0x00,   //10 Описание символа "Пустота"   00000000
+	0x01,   //11 Описание символа (верх.тире) 00000001
+	0x40,   //12 Описание символа (сред.тире) 01000000
+	0x08,   //13 Описание символа (нижн.тире) 00001000
+	0x73,   //14 Описание символа P           01110011
+	0x38,   //15 Описание символа L           00111000
+	0x37,   //16 Описание символа П           00110111
+	0x6E    //17 Описание символа У           01101110
 	};
 
 //преобразует symbl в соответствии с symbols в displ
@@ -162,10 +167,10 @@ P4OUT&=~BIT7;
 }
 //высылает displ по SPI в индикатор
 int invert;
-void show_display(void){
+void show_display(int regim){
 int x;
  invert^=0xFFFF;
- init_spi1_master();
+ init_spi1_master(regim);
  cs_on_display();
  for (x=0;x<4;x++){
   while ((IFG2&UTXIFG1)==0) ;
@@ -260,6 +265,17 @@ int res;
 // symbl[3]=results[0]%10;
  update_diplay();
 }
+void make_view_time_sec(int adc_result){
+unsigned long int DegC;
+   DegC = ((((long)adc_result-1615)*704)/4095);
+ symbl[0]=DegC%10;
+ DegC/=10;
+ symbl[1]=DegC%10;
+ DegC/=10;
+ symbl[2]=DegC%10;
+ DegC/=10;
+ symbl[3]=DegC%10;
+}
 
 void redraw_display_second(int force){
   if (force || GlobalTime!=time_to_show){
@@ -274,9 +290,9 @@ void redraw_display_minutes(int force){
    }
 }
 void redraw_display_voltage(int force){
-  if (force || (GlobalTime!=time_to_show)){
-   time_to_show=GlobalTime;
-   make_view_time_vol();
+  if (force || (results[4]!=gradus_to_show)){
+   gradus_to_show=results[4];
+   make_view_time_vol(gradus_to_show);
    }
 }
 
@@ -292,20 +308,17 @@ int forcedly=0;
   }
  switch(mode_display){
   case 0:
-   redraw_display_voltage(forcedly);
-//   redraw_display_second(forcedly);
+   redraw_display_second(forcedly);
    break;
   case 1:
    redraw_display_minutes(forcedly);
    break;
   case 2:
-   redraw_display_second(forcedly);
-//   redraw_display_voltage(forcedly);
+   redraw_display_voltage(forcedly);
    break;
-//  case 3:
-//   redraw_display_second(forcedly);
-//   redraw_display_voltage(forcedly);
-//   break;
+  case 3:
+   redraw_display_celciy(forcedly);
+   break;
   }
 }
 
@@ -530,7 +543,7 @@ void set_pin_directions(void){
 int run_full_speed;
 int current_speed;
 // 0 - ACLK 1 - SMCLK
-int current_timer;
+int mode_timer;
 //переключаемся на скоростной режим таймера
 int switch_speed_timer;
 
@@ -652,6 +665,9 @@ u16 read_asp_rcv_fifo(void){
 
 int end_adc_conversion;
 long time_to_change;
+int mode;
+int mode_timer;
+int error_adc;
 void main(void)
 { 
 int i;
@@ -662,13 +678,15 @@ int i;
  set_pin_directions();
  run_full_speed=0;
  current_speed=0;
- current_timer=0;
+ mode_timer=0;
  switch_speed_timer=0;
  end_adc_conversion=1;
  change_to_mode=2;
  mode_display=2;
  time_to_change=0;
+ mode=0;
  invert=0;
+ error_adc=0;
 	//переходим на работу от часового кварца
  run_LFXT1CLK(0x02);
 // init_wdt();
@@ -678,12 +696,6 @@ int i;
  init_adc();
 
   _EINT();                              // Enable interrupts
-  for (i = 0xFFF; i > 0; i--);           // Time for flag to set
-
-    if (current_speed==0 && run_full_speed && run_xt2()){
-     switch_xt2();
-     }
-  for (i = 0xFF; i > 0; i--);           // Time for flag to set
   
   while(1)
   {
@@ -691,20 +703,34 @@ int i;
     _BIS_SR(CPUOFF);                 // входим в режим спячки
     P1OUT |= 0x01;                      // Set P1.0 LED on
     tick_timer();
-//    P1OUT |= 0x01;                      // Set P1.0 LED on
-    if (current_speed==0 && run_full_speed ) { //&& run_xt2()){
+    if (current_speed==0 && run_full_speed  && run_xt2()){
      switch_xt2();
      }
-    if (current_speed && end_adc_conversion){
-     end_adc_conversion=0;
-     ADC12CTL0 |= ADC12SC;                 // Start conversion
-//     if ((time_to_change+10)<GlobalTime){
-//      if (change_to_mode>=3) 
-//       change_to_mode=0; 
-//      else 
-//       change_to_mode++;
-//      time_to_change=GlobalTime;
-//      }
+    switch(mode){
+     case 0: //вывод на экран времени (минуты секунды)
+      if ((time_to_change+5)<GlobalTime){
+       change_to_mode++;
+       time_to_change=GlobalTime;
+       }
+      break;
+     case 1: //вывод на экран времени (часы минуты)
+      if ((time_to_change+5)<GlobalTime){
+       change_to_mode++;
+       time_to_change=GlobalTime;
+       }
+      break;
+     case 2: //вывод на экран напряжения (0-4095)
+      if ((time_to_change+5)<GlobalTime){
+       change_to_mode++;
+       time_to_change=GlobalTime;
+       }
+      break;
+     case 3: //вывод на экран температуры (градусы цельсия)
+      if ((time_to_change+5)<GlobalTime){
+       change_to_mode=0;
+       time_to_change=GlobalTime;
+       }
+      break;
      }
     P1OUT &= ~0x01;                     // Reset P1.0 LED off
   }
@@ -717,41 +743,43 @@ return 1;
 
 interrupt[TIMERA0_VECTOR] void timer_a_0 (void)
 {
- if (current_timer){
-//  BCSCTL2=(BCSCTL2&(~(SELM0)))|SELM1;
-  	//счет таймера от SMCLK
-  if (refresh_timer>(139/2)){
-   show_display();
-   refresh_timer-=140/2;
+ switch(mode_timer){
+  case 0: //работа от ACLK (cчет таймера от ACLK)
+   show_display(0x01);
+   counter_timer++;
+   if (counter_timer>3){
+    GlobalTime++;
+    counter_timer-=4;
+    }
+   if (power_good()) run_full_speed=1;
+   if (switch_speed_timer){
+    mode_timer=1;
+    TACTL&=~(MC0|MC1); //stop
+    TACTL=ID_0|TASSEL_2;
+    CCR0=5266;	 //1400,07595898 Гц 0x1492(5266)
+    TACTL|=MC_1;
+    }
+   break; //case 0
+  case 1: //1400 Гц (счет таймера от SMCLK)
+   //  BCSCTL2=(BCSCTL2&(~(SELM0)))|SELM1;
+   if (end_adc_conversion){
+    end_adc_conversion=0;
+    ADC12CTL0 |= ADC12SC;                 // Start conversion
+    }
+   else {error_adc=1;}
+   if (refresh_timer>(139){
+    show_display(0x00);
+    refresh_timer-=140;
+    }
+   refresh_timer++;
+   sub_counter_timer++;  // 1400 Гц (делитель 5266)
+   if (sub_counter_timer>(1399)){
+    GlobalTime++;
+    sub_counter_timer-=1400;
+     }
+   break; //case 1 - 1400 Гц
    }
-  refresh_timer++;
-  sub_counter_timer++;  // 1400 Гц (делитель 5266)
-  if (sub_counter_timer>(1399)){
-   GlobalTime++;
-   sub_counter_timer-=1400;
-
-   }
-  
-  }
- else{
-  	//счет таймера от ACLK
-  if (switch_speed_timer){
-   current_timer=1;
-   TACTL&=~(MC0|MC1); //stop
-   TACTL=ID_0|TASSEL_2;
-   CCR0=5266;	 //1400,07595898 Гц 0x1492(5266)
-   TACTL|=MC_1;
-   }
-  counter_timer++;
-  show_display();
-  if (counter_timer>3){
-   GlobalTime++;
-   counter_timer-=4;
-   }
-  if (power_good()) run_full_speed=1;
-  }
  _BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
-
 } 
 interrupt[WDT_VECTOR] void wd_int (void)
 {
@@ -767,15 +795,12 @@ interrupt[WDT_VECTOR] void wd_int (void)
 
 interrupt[ADC_VECTOR] void ADC12ISR (void)
 {
-//    P1OUT |= 0x01;                      // Set P1.0 LED on
   results[0] = ADC12MEM0;               // Move results, IFG is cleared
   results[1] = ADC12MEM1;               // Move results, IFG is cleared
   results[2] = ADC12MEM2;               // Move results, IFG is cleared    
   results[3] = ADC12MEM3;               // Move results, IFG is cleared  
-//    P1OUT &= ~0x01;                     // Reset P1.0 LED off
   _BIC_SR_IRQ(CPUOFF);               // Clear LPM0, SET BREAKPOINT HERE
   end_adc_conversion=1;
-//  end_adc_conversion=1;
 }
 interrupt[UART0RX_VECTOR] void usart0_rx (void)
 {
@@ -791,8 +816,12 @@ interrupt[UART0RX_VECTOR] void usart0_rx (void)
 // asp_rcv_fifo_buf[asp_rcv_fifo_end++ & (SERIAL_FIFO_RCV_LEN-1)]=data_wr;
 // return 1;
 //}
- if ( ( (asp_rcv_fifo_end+1)&(SERIAL_FIFO_RCV_LEN-1))!= (asp_rcv_fifo_start&(SERIAL_FIFO_RCV_LEN-1)) )
+
+
+// - добавить в отладочном режиме эту проверку if ( ( (asp_rcv_fifo_end+1)&(SERIAL_FIFO_RCV_LEN-1))!= (asp_rcv_fifo_start&(SERIAL_FIFO_RCV_LEN-1)) )
   asp_rcv_fifo_buf[asp_rcv_fifo_end++ & (SERIAL_FIFO_RCV_LEN-1)]=RXBUF0;
+
+
 
 // if (temp_iosr_serial&( (1<<bit_OE)| //Overrun occurs - переполнение приема
 //                 (1<<bit_FE)| //framing error
