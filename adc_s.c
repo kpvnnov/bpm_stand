@@ -1,5 +1,5 @@
 
-// $Id: adc_s.c,v 1.4 2003-06-18 19:51:09 peter Exp $
+// $Id: adc_s.c,v 1.5 2003-06-23 10:19:47 peter Exp $
 #include  <msp430x14x.h>
 #include "global.h"
 
@@ -238,11 +238,11 @@ void set_adc(int ch){
  P3OUT&=~(BIT0|BIT1|BIT2|BIT3);
 
  if (ch&0x01) P3OUT|=BIT0;
- if (ch&0x02) P3OUT|=BIT1;
- if (ch&0x04) P3OUT|=BIT2;
- if (ch&0x20) P3OUT|=BIT3;
+ if (ch&0x08) P3OUT|=BIT1;
+ if (ch&0x10) P3OUT|=BIT2;
+ if ((ch&0x20)==0) P3OUT|=BIT3;
 
- switch((ch>>3)&0x03){
+ switch((ch>>1)&0x03){
   case 0:
    ADC12MCTL1 = INCH_6+SREF_2;
    ADC12MCTL3 = INCH_6+SREF_2;

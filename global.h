@@ -1,4 +1,4 @@
-//$Id: global.h,v 1.19 2003-06-18 19:51:09 peter Exp $
+//$Id: global.h,v 1.20 2003-06-23 10:19:47 peter Exp $
 
 
 #define DEBUG_SERIAL
@@ -156,7 +156,8 @@ enum chanel_job{
 	LEVEL_DOWN
        };
 
-#define close_valve()	P3OUT&=~BIT1
-#define open_valve()	P3OUT&=~BIT1
-#define on_pump()	P3OUT&=~BIT1
-#define off_pump()	P3OUT&=~BIT1
+#define open_valve()	P2OUT&=~(BIT4+BIT5);valve_hold=5
+#define set_hold()      P2OUT&=~BIT5
+#define close_valve()	P2OUT|=(BIT4+BIT5)
+#define on_pump()	P4OUT|=BIT0
+#define off_pump()	P4OUT&=~BIT0

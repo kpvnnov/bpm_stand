@@ -1,4 +1,4 @@
-// $Id: uart_s.c,v 1.5 2003-06-18 19:51:09 peter Exp $
+// $Id: uart_s.c,v 1.6 2003-06-23 10:19:47 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -19,6 +19,7 @@ extern u16 why_job;
 extern unsigned int current_level;
 extern unsigned int what_doing;
 unsigned int to_level;
+extern unsigned int valve_hold;
 
 extern u16 stat_buf[STAT_FIFO_RCV_LEN*SIZE_STAT];
 extern unsigned int  stat_rcv_fifo_start;      /* stat receive buffer start index      */
@@ -150,7 +151,7 @@ _________________________________________________________________
 0x09      пакет данных установки канала АЦП
        содержание пакета:
     байт      - номер канала для преобразования
-                в котором - SXMA AMMM
+                в котором - SXMM MAAM
                 S - 0 - основной, 1 - резервный
                 X -  0 - режим вывода всех отсчетов опорного и 
                          исследуемого канала (пакет 0x07)
@@ -611,6 +612,7 @@ u16 shift_fifo;
        to_level=packets[shift_fifo-LEVEL_SET]+(packets[shift_fifo-LEVEL_SET+1]<<8);
        to_level&=0xFFF;
        open_valve();
+       off_pump();
        what_doing=LEVEL_DOWN;
       break;
      case 0x0E:		//накачать давление до указанной величины

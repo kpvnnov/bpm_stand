@@ -1,4 +1,4 @@
-// $Id: uart.c,v 1.19 2003-06-06 13:34:58 peter Exp $
+// $Id: uart.c,v 1.20 2003-06-23 10:19:47 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -91,6 +91,8 @@ _____
                 x - зарезервировано
                 A - значение канала АЦП (PRESS_1 - PRESS_4)
                 M - значение для MUX (A0-A3)
+0x17      пакет данных с двух каналов
+
 */
 
 

@@ -1,4 +1,4 @@
-// $Id: timer_s.c,v 1.4 2003-06-18 19:51:09 peter Exp $
+// $Id: timer_s.c,v 1.5 2003-06-23 10:19:47 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -21,6 +21,7 @@ extern u16 why_job;
 extern unsigned int current_level;
 extern unsigned int what_doing;
 extern unsigned int to_level;
+unsigned int valve_hold;
 
 
 
@@ -391,6 +392,11 @@ HOLD_TIME_IRQ()
      }
 	//сброс WatchDog
     CLEAR_DOG();	
+    if (valve_hold){
+     valve_hold--;
+     if (valve_hold==0) set_hold();
+     }
+
     #ifdef DISPLAY
     show_display();
     #endif //display
