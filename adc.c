@@ -1,5 +1,5 @@
 
-// $Id: adc.c,v 1.14 2004-03-07 21:31:50 peter Exp $
+// $Id: adc.c,v 1.15 2004-05-12 14:47:14 peter Exp $
 #include  <msp430x14x.h>
 
 //типы переменных
@@ -24,7 +24,7 @@ extern unsigned int results1[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
 extern unsigned int results2[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
 extern unsigned int results3[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
 extern unsigned int results[ADC_FIFO_RCV_LEN];
-                                        
+
 int error_adc;
 
 int end_adc_conversion;

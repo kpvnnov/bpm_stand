@@ -1,4 +1,4 @@
-// $Id: uart_p.h,v 1.4 2004-03-31 16:37:39 peter Exp $
+// $Id: uart_p.h,v 1.5 2004-05-12 14:47:15 peter Exp $
 
 struct que{
  u8 busy;    //место занято. 
@@ -8,6 +8,8 @@ struct que{
                 //3 передано (ждем подтверждения)
                 //4 не передано (подтверждения не потребуется)
  u8 numeric; //порядковый номер пакета
+ u8 type;       //тип пакета
+ u8 time_wait;  //время ожидания подтверждения
  u8 len;
 };
 
@@ -77,7 +79,7 @@ void fill_date_packet(u8 type_packet, u16 num_packet);
 #define  DATA18PACKET   5
 
 #define  DATA19PACKET    (2+6)
-#define  DATA1APACKET    (6*2+6)
+#define  DATA1APACKET    (6*2+4+6)
 
 #define  DATA1BPACKET    (2+SIZE_N_LOADER+6)
 #define  ADDRESS_PACK1B  (2+SIZE_N_LOADER+6)
@@ -108,6 +110,7 @@ void fill_date_packet(u8 type_packet, u16 num_packet);
 #define  ADDRESS_PACK25_DATA (SIZE_N_LOADER+6)
 
 #define  DATA26PACKET   5
+#define  DATA27PACKET   (4+6)
 
 #ifdef STEND
  #if DATAxAPACKET>=MAXPACKETLEN
