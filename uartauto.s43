@@ -1,0 +1,188 @@
+#include  "msp430x11x1.h"
+;******************************************************************************
+;   MSP430x11x(1) Demo - 9600-baud UART using 3.579545Hz Crystal
+;
+;   Description: This program demonstrates a half-duplex 9600-baud UART using 
+;   Timer_A3 and a 3.58Mhz crystal. The program will wait in LPM0, echoing 
+;   back a received character using 8N1 protocol.  
+;
+; THIS PROGRAM IS PROVIDED "AS IS". TI MAKES NO WARRANTIES OR
+; REPRESENTATIONS, EITHER EXPRESS, IMPLIED OR STATUTORY, 
+; INCLUDING ANY IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS 
+; FOR A PARTICULAR PURPOSE, LACK OF VIRUSES, ACCURACY OR 
+; COMPLETENESS OF RESPONSES, RESULTS AND LACK OF NEGLIGENCE. 
+; TI DISCLAIMS ANY WARRANTY OF TITLE, QUIET ENJOYMENT, QUIET 
+; POSSESSION, AND NON-INFRINGEMENT OF ANY THIRD PARTY 
+; INTELLECTUAL PROPERTY RIGHTS WITH REGARD TO THE PROGRAM OR 
+; YOUR USE OF THE PROGRAM.
+;
+; IN NO EVENT SHALL TI BE LIABLE FOR ANY SPECIAL, INCIDENTAL, 
+; CONSEQUENTIAL OR INDIRECT DAMAGES, HOWEVER CAUSED, ON ANY 
+; THEORY OF LIABILITY AND WHETHER OR NOT TI HAS BEEN ADVISED 
+; OF THE POSSIBILITY OF SUCH DAMAGES, ARISING IN ANY WAY OUT 
+; OF THIS AGREEMENT, THE PROGRAM, OR YOUR USE OF THE PROGRAM. 
+; EXCLUDED DAMAGES INCLUDE, BUT ARE NOT LIMITED TO, COST OF 
+; REMOVAL OR REINSTALLATION, COMPUTER TIME, LABOR COSTS, LOSS 
+; OF GOODWILL, LOSS OF PROFITS, LOSS OF SAVINGS, OR LOSS OF 
+; USE OR INTERRUPTION OF BUSINESS. IN NO EVENT WILL TI'S 
+; AGGREGATE LIABILITY UNDER THIS AGREEMENT OR ARISING OUT OF 
+; YOUR USE OF THE PROGRAM EXCEED FIVE HUNDRED DOLLARS 
+; (U.S.$500).
+;
+; Unless otherwise stated, the Program written and copyrighted 
+; by Texas Instruments is distributed as "freeware".  You may, 
+; only under TI's copyright in the Program, use and modify the 
+; Program without any charge or restriction.  You may 
+; distribute to third parties, provided that you transfer a 
+; copy of this license to the third party and the third party 
+; agrees to these terms by its first use of the Program. You 
+; must reproduce the copyright notice and any other legend of 
+; ownership on each copy or partial copy, of the Program.
+;
+; You acknowledge and agree that the Program contains 
+; copyrighted material, trade secrets and other TI proprietary 
+; information and is protected by copyright laws, 
+; international copyright treaties, and trade secret laws, as 
+; well as other intellectual property laws.  To protect TI's 
+; rights in the Program, you agree not to decompile, reverse 
+; engineer, disassemble or otherwise translate any object code 
+; versions of the Program to a human-readable form.  You agree 
+; that in no event will you alter, remove or destroy any 
+; copyright notice included in the Program.  TI reserves all 
+; rights not specifically granted under this license. Except 
+; as specifically provided herein, nothing in this agreement 
+; shall be construed as conferring by implication, estoppel, 
+; or otherwise, upon you, any license or other right under any 
+; TI patents, copyrights or trade secrets.
+;
+; You may not use the Program in non-TI devices.
+;
+;                MSP430F1121
+;             -----------------
+;         /|\|              XIN|-  
+;          | |                 | 3.58Mhz
+;          --|RST          XOUT|-
+;            |                 |
+;            |                 | 9600 8N1 
+;            |          TX/P1.1|-------->  
+;            |          TX/P2.2|<--------
+;
+;   CPU registers used
+#define      RXTXData R4                    
+#define      BitCnt   R5
+;
+;   Conditions for 9600 Baud HW/SW UART, ACLK = 3.579545MHz
+Bitime_5     equ    0186                    ; 0.5 bit length 
+Bitime       equ    0373                    ; 104 us
+RXD          set    004h                    ; RXD on P2.2
+TXD          set    002h                    ; TXD on P1.1
+;
+;   M.Buccini
+;   Texas Instruments, Inc
+;   March 2002
+;******************************************************************************
+;----------------------------------------------------------------------------- 
+            ORG     0F000h                  ; Program Start
+;----------------------------------------------------------------------------- 
+RESET       mov.w   #300h,SP                ; Initialize Stackpointer
+            call    #Init_Sys               ; Initialize System Peripherals
+                                            ;
+Mainloop    call    #RX_Ready               ; UART ready to RX one Byte
+            bis.w   #LPM0,SR                ; Enter LPM0 Until Byte RXed
+            call    #TX_Byte                ; TX Back RXed Byte Received
+            jmp     Mainloop                ;
+                                            ;
+;----------------------------------------------------------------------------- 
+Init_Sys;   Initialize System Peripherals  
+;----------------------------------------------------------------------------- 
+StopWDT     mov.w   #WDTPW+WDTHOLD,&WDTCTL  ; Stop WDT
+SetupC0     mov.w   #OUT,&CCTL0             ; TXD Idle as Mark 
+SetupTA     mov.w   #TASSEL0+MC1,&TACTL     ; ACLK, continous mode
+SetupP1_2   bis.b   #TXD,&P1SEL             ; P1.1/TA0 for TXD function
+            bis.b   #TXD,&P1DIR             ; TXD output on P1
+            bis.b   #RXD,&P2SEL             ; P2.2/TA0 as RXD input
+SetupBC     bis.b   #XTS,&BCSCTL1           ; ACLK = LFXT1 HF XTAL
+SetupOsc    bic.b   #OFIFG,&IFG1            ; Clear OSC fault flag 
+            mov.b   #0FFh,R15 
+SetupOsc1   dec.b   R15                     ; Ddelay to ensure startup 
+            jnz     SetupOsc1 
+            bit.b   #OFIFG,&IFG1            ; OSC fault flag set? 
+            jnz     SetupOsc                ; 
+            bis.b   #SELM1+SELM0,&BCSCTL2   ; (CPU) MCLK = LFXT1
+            eint                            ; General enable interrupts
+            ret                             ; Return from subroutine
+                                            ;
+;----------------------------------------------------------------------------- 
+TX_Byte;    Subroutine that will TX Byte from RXTXData Buffer
+;----------------------------------------------------------------------------- 
+            mov.w   #TX_Count,BitCnt        ; TX_Count --> Branch Pointer
+            push.w  &TAR                    ; Current state of TA Counter
+            add.w   #Bitime,0(SP)           ; Bitime till next bit
+            pop.w   &CCR0                   ; CCR0=Bitime till next bit
+            mov.w   #OUTMOD2+OUTMOD0+CCIE,&CCTL0  ; TXD = Space = Start Bit 
+TX_Wait     bit.w   #CCIE,&CCTL0            ; Wait for TX completion
+            jnz     TX_Wait                 ; 
+            ret                             ; Return from subroutine
+                                            ;
+;----------------------------------------------------------------------------- 
+RX_Ready;    Subroutine that Readies UART to RX Byte into RXTXData Buffer
+;----------------------------------------------------------------------------- 
+            mov.w   #RX_Count,BitCnt        ; RX_Count --> Branch Pointer 
+            mov.w   #SCS+CCIS0+CM1+CAP+OUT+CCIE,&CCTL0  ; Neg Edge, Cap., Out
+            ret                             ; Return from subroutine
+                                            ;
+;----------------------------------------------------------------------------- 
+TA0_ISR;    CCR0/UART ISR, RXTXData Buffer holds UART Data
+;----------------------------------------------------------------------------- 
+            add.w   #Bitime,&CCR0           ; Bitime till next bit
+            br      @BitCnt+                ; Branch To Routine
+                                            ;
+TX_Bit      rra.b   RXTXData                ; LSB is shifted to carry
+            jc      TX_Mark                 ; Jump if bit = 1
+TX_Space    bis.w   #OUTMOD2,&CCTL0         ; TX Space 
+            reti                            ;
+TX_Comp     bic.w   #CCIE,&CCTL0            ; All Bits RX, disable interrupt 
+TX_Mark     bic.w   #OUTMOD2,&CCTL0         ; TX Mark 
+            reti                            ;
+RX_Edge     bic.w   #CAP,&CCTL0             ; Switch to Compare mode
+            add.w   #Bitime_5,&CCR0         ; First Databit 1.5 Bits from edge
+            reti                            ;
+RX_Bit      bit.w   #SCCI,&CCTL0            ; Get bit waiting in SCCI
+            rrc.b   RXTXData                ; Store received bit
+            reti                            ;
+;>>>>>>>>>> Decode of Received Byte Here <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+RX_Comp     bic.w   #CCIE,&CCTL0            ; All Bits RXed, Disable Interrupt 
+            mov.w   #GIE,0(SP)              ; Decode Byte= Active in Mainloop
+            reti                            ;
+;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+            EVEN
+RX_Count    DW      RX_Edge                 ; Special for TA
+            DW      RX_Bit                  ; RX First Data Bit
+            DW      RX_Bit                  ;
+            DW      RX_Bit                  ;
+            DW      RX_Bit                  ;
+            DW      RX_Bit                  ;
+            DW      RX_Bit                  ;
+            DW      RX_Bit                  ;
+            DW      RX_Bit                  ;
+            DW      RX_Comp                 ; RX Complete, process RX data
+TX_Count    DW      TX_Bit                  ; TX First Data Bit
+            DW      TX_Bit                  ;
+            DW      TX_Bit                  ;
+            DW      TX_Bit                  ;
+            DW      TX_Bit                  ;
+            DW      TX_Bit                  ;
+            DW      TX_Bit                  ;
+            DW      TX_Bit                  ;
+            DW      TX_Mark                 ; TX Stop Bit= Mark
+TX_End      DW      TX_Comp                 ; TX Complete and Complete
+                                            ;
+;----------------------------------------------------------------------------- 
+;           Interrupt Vectors Used MSP430x11x1          
+;----------------------------------------------------------------------------- 
+            ORG     0FFFEh                  ; MSP430 RESET Vector
+            DW      RESET                   ; 
+            ORG     0FFF2h                  ; Timer_A0 Vector
+            DW      TA0_ISR                 ; 
+            END
+             
