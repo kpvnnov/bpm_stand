@@ -1,5 +1,5 @@
 //********************************************************
-// $Id: msp_main.c,v 1.13 2003-05-21 20:29:46 peter Exp $
+// $Id: msp_main.c,v 1.14 2003-05-22 16:25:23 peter Exp $
 //********************************************************
 
 //#include <msp430x11x1.h>
@@ -11,6 +11,10 @@
 extern int end_adc_conversion;
 //extern unsigned int results[5];         // Needs to be global in this example
 extern int error_adc;
+extern unsigned int  adc_rcv_fifo_start;      /* ADC receive buffer start index      */
+
+extern volatile unsigned int  adc_rcv_fifo_end;        /* ADC receive  buffer end index        */
+
 
 //таймер
 extern int change_to_mode;
@@ -28,11 +32,18 @@ extern int switch_speed_timer;
 extern int mode_display;
 extern int second_point;
 extern int invert;
+extern int symbl[4];
+
 	//это врем€ в формате long дл€ показа на индикатор
 extern time_in time_to_show;
 
 
 
+#ifdef DEBUG_SERIAL
+extern s16 packet_in_fifo;
+extern s16 fifo_trn_depth;
+
+#endif //DEBUG_SERIAL
 
 
 
@@ -42,25 +53,45 @@ extern time_in time_to_show;
 
 //возвращаем не ноль, если часовой кварц работает
 int test_run_LFXT1CLK(void){
-int i=10;
+int c=10;
+int i;
 unsigned int to_compare,to_compare1;
- while(i){
+ while(c){
 	//захватываем значение таймера
-  to_compare=TIMER_A_COUNTER;	
+  to_compare=TAR;	//TIMER_A_COUNTER;	
 	//делаем паузу
   for (i = 100; i>0; i--);           // Delay
+	//   \   000C  3C406400          MOV     #100,R12       //2 
+	//   \   0010            ?0004:
+	//   \   0010  1C93              CMP     #1,R12  	//2
+	//   \   0012  0238              JL      (?0003) 	//4
+	//   \   0014  3C53              ADD     #-1,R12        //2
+	//     60            for (i = 100; i>0; i--);           //
+	//   \   0016  FC3F              JMP     (?0004)        //4
+	// подсчет числа тактов сделан "эмпирически" 22.05.2003
+	//   \   0018            ?0003:                         //=2+(1+2+1+2)*100=602
+	// от внутреннего генератора врем€ выполнени€:
+	// 602/610.000=0,000986885
+	// 602/750.000=0,000802667
+	// 602/900.000=0,000668889
+	// на эмул€торе это задержка показывает 25-26 тактов 32768
+	// 25 тактов 32768 = 25/32768=0,000762939453125 сек
+	// 26 тактов 32768 = 26/32768=0,000793457 сек
+	// минимальное значение таймера, которое, веро€тно, можно получить
+	// 0,000668889*32768=21,91815475
+
 	//захватываем значение таймера оп€ть
-  to_compare1=TIMER_A_COUNTER;
+  to_compare1=TAR;	//TIMER_A_COUNTER;
 	//рассчитываем разницу
   if (to_compare1>to_compare)
    to_compare=to_compare1-to_compare;
   else
    to_compare=0x2000+to_compare1-to_compare;
 	//если таймер бежит, то считаем, что кварц запустилс€
-  if (to_compare>0x100) break;
-  i--;
+  if (to_compare>15) break;
+  c--;
   }
- return i;
+ return c;
 }
 
 
@@ -76,12 +107,6 @@ int run_LFXT1CLK( int mode){
 	//XTS = 0: The low-frequency oscillator is selected.
  if (mode&0x04) _BIS_SR(SCG1);
  BCSCTL1&=~XTS;
-
- _BIC_SR(OSCOFF);			// ¬ключаем часовой кварц
-	//провер€ем запуск часового кварца
- if (!test_run_LFXT1CLK()){	//часовой не запустилс€
-  return 0;
-  }
 	// делитель (ACLK/1)
 	// DIVA = 0: 1
 	// DIVA = 1: 2
@@ -90,6 +115,12 @@ int run_LFXT1CLK( int mode){
 	// если запрошено отключение XT2 кварца - отключаем
 	// XT2Off = 1: the oscillator is off if it is not used for MCLK or SMCLK.
  BCSCTL1 = (BCSCTL1& (~(DIVA0|DIVA1))) | (mode&0x01 ? XT2OFF:0); 
+
+ _BIC_SR(OSCOFF);			// ¬ключаем часовой кварц
+	//провер€ем запуск часового кварца
+ if (!test_run_LFXT1CLK()){	//часовой не запустилс€
+  return 0;
+  }
 	// включаем источник основной частоты - LFXT1CLK
 	// Bit0, DCOR: The DCOR bit selects the resistor for injecting current into the
 	// dc generator. Based on this current, the oscillator operates if
@@ -146,6 +177,7 @@ void set_pin_directions(void){
   P5DIR = 0xFF;                         // All P5.x outputs
   P5OUT = 0;                            // All P5.x reset
 //  P5SEL = 0x0E; SPI1
+  P5SEL = 0x70; 			// MCLK, SMCLK,ACLK на вывод
   P6DIR = 0xFF;                         // All P6.x outputs
   P6OUT = 0;                            // All P6.x reset
   P6SEL = 0x0F;                         // Enable A/D channel inputs
@@ -188,9 +220,17 @@ int mode_work;
 
 void main(void)
 { 
-//int i;
+int i;
 	// останавливаем watchdog
- WDTCTL=WDTPW|WDTHOLD;  		// Stop WDT
+// WDTCTL=WDTPW|WDTHOLD;  		// Stop WDT
+
+	/* Watchdog mode -> reset after expired time */
+	/* WDT is clocked by fACLK (assumed 32KHz) */
+	// #define WDT_ARST_1000       (WDTPW+WDTCNTCL+WDTSSEL)                          
+	/* 1000ms  " */
+ WDTCTL = WDT_ARST_1000;
+ 	//сброс WatchDog
+ WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
 	// конфигурируем ноги ввода вывода
  set_pin_directions();
 // run_full_speed=0;
@@ -205,6 +245,26 @@ void main(void)
  time_to_show=1;
  change_to_mode=0;
  time_to_change=0;
+ if (IFG1&0x01){	//сработал WATCHDOG
+	//то считаем пока это аварийным режимом
+	//выключаем ноги от блока USART1
+    P3SEL &= ~0xC0;                        // P3.6,7 = USART1 option select
+    symbl[3]=0x0D;	//'D'
+    symbl[2]=0x0D;	//'D'
+    symbl[1]=0x0D;	//'D'
+    symbl[0]=0x10;	//' '
+    update_diplay();
+    while(1){
+	//сброс WatchDog
+     WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
+	//и начинаем этой ногой "мигать"
+     for (i = 20000; i>0; i--);           // Delay
+     P3OUT^=BIT6;
+     for (i = 2000; i>0; i--);           // Delay
+     P3OUT^=BIT6;
+     show_display(0x00);
+     }
+  }
 	//запускаем таймер A и часы от него (ACLK)
  init_timer_a();
 	//переходим на работу от часового кварца
@@ -213,12 +273,22 @@ void main(void)
 	//то считаем пока это аварийным режимом
 	//выключаем ноги от блока USART1
     P3SEL &= ~0xC0;                        // P3.6,7 = USART1 option select
+    symbl[3]=0x0A;	//'A'
+    symbl[2]=0x0C;	//'C'
+    symbl[1]=0x15;	//'L'
+    symbl[0]=0x10;	//' '
+    update_diplay();
     while(1){
+	//сброс WatchDog
+     WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
 	//и начинаем этой ногой "мигать"
-     for (i = 3000; i>0; i--);           // Delay
-     P3OUT^=PINтакой-то;
-     for (i = 500; i>0; i--);           // Delay
-     P3OUT^=PINтакой-то;
+     for (i = 20000; i>0; i--);           // Delay
+	//сброс WatchDog
+     WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
+     P3OUT^=BIT6;
+     for (i = 20000; i>0; i--);           // Delay
+     P3OUT^=BIT6;
+     show_display(0x00);
      }
   }
 // init_wdt();
@@ -230,10 +300,18 @@ void main(void)
 	//то считаем пока это аварийным режимом
 	//выключаем ноги от блока USART1
     P3SEL &= ~0xC0;                        // P3.6,7 = USART1 option select
+    symbl[3]=0x0C;	//'C'
+    symbl[2]=0x15;	//'L'
+    symbl[1]=0x02;	//'2'
+    symbl[0]=0x10;	//' '
+    update_diplay();
     while(1){
+	//сброс WatchDog
+     WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
 	//и начинаем этой ногой "мигать"
      for (i = 1000; i>0; i--);           // Delay
-     P3OUT^=PINтакой-то;
+     P3OUT^=BIT6;
+     show_display(0x00);
      }
    }
   switch_xt2();
@@ -247,7 +325,7 @@ void main(void)
   {
 //    BCSCTL2|=SELM0|SELM1;
     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
-    P1OUT &= ~0x01;                     // Reset P1.0 LED off
+    P1OUT |= 0x01;                      // Set P1.0 LED on
     tick_timer();
     work_with_display();
 
@@ -265,7 +343,7 @@ void main(void)
      work_with_adc_put();
     //-----------------
 
-    P1OUT |= 0x01;                      // Set P1.0 LED on
+    P1OUT &= ~0x01;                     // Reset P1.0 LED off
   }
 
 }

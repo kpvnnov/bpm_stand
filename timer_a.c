@@ -1,4 +1,4 @@
-// $Id: timer_a.c,v 1.7 2003-05-21 20:29:46 peter Exp $
+// $Id: timer_a.c,v 1.8 2003-05-22 16:25:23 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -166,9 +166,12 @@ return 1;
 }
 interrupt[TIMERA0_VECTOR] void timer_a_0 (void)
 {
+ P1OUT |= 0x01;                      // Set P1.0 LED on
  switch(mode_timer){
   case 0: //работа от ACLK (cчет таймера от ACLK)
    show_display(0x01);
+	//сброс WatchDog
+   WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
    counter_timer++;
    if (counter_timer>3){
     GlobalTime++;
@@ -196,9 +199,9 @@ interrupt[TIMERA0_VECTOR] void timer_a_0 (void)
    capture_timer++;
    if (refresh_timer>139){
     show_display(0x00);
+	//сброс WatchDog
+    WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
     refresh_timer-=140;
-
-
     }
    refresh_timer++;
    sub_counter_timer++;  // 1400 Гц (делитель 5266)
@@ -210,6 +213,7 @@ interrupt[TIMERA0_VECTOR] void timer_a_0 (void)
    break; //case 1 - 1400 Гц
    }
  _BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
+ P1OUT &= ~0x01;                     // Reset P1.0 LED off
 } 
 interrupt[WDT_VECTOR] void wd_int (void)
 {

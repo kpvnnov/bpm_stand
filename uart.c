@@ -1,7 +1,18 @@
-// $Id: uart.c,v 1.10 2003-05-21 20:29:46 peter Exp $
+// $Id: uart.c,v 1.11 2003-05-22 16:25:23 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
+
+
+
+#ifdef DEBUG_SERIAL
+s16 packet_in_fifo;
+s16 fifo_trn_depth;
+s16 packet_fifo_full;
+s16 fifo_trn_depth_max;
+s16 error_uart_depth;
+s16 error_send_serial;
+#endif //DEBUG_SERIAL
 
 
 /*
@@ -141,7 +152,7 @@ int crc;
  if ((n=hold_packet())==MAXQUE) return 0; //свободных пакетов нет
  #ifdef DEBUG_SERIAL
  packet_in_fifo++;
- #endif DEBUG_SERIAL
+ #endif //DEBUG_SERIAL
 	//копируем туда данные для пакета
  memcpy(&packets[(n+1)*MAXPACKETLEN-DATA3PACKET],info,SIZEDATA3); 
 	//помещаем в пакет его длину (без завершающего EOFPACKET)
@@ -168,12 +179,12 @@ int crc;
  if ((n=hold_packet())==MAXQUE) {
   #ifdef DEBUG_SERIAL
   packet_fifo_full++;
-  #endif DEBUG_SERIAL
+  #endif //DEBUG_SERIAL
   return 0; //свободных пакетов нет
   }
  #ifdef DEBUG_SERIAL
  packet_in_fifo++;
- #endif DEBUG_SERIAL
+ #endif //DEBUG_SERIAL
 
  packets[(n+1)*MAXPACKETLEN-11]='0';
  packets[(n+1)*MAXPACKETLEN-10]='9';
@@ -221,7 +232,7 @@ int x;
     queue[x].busy=FREEPLACE; 	
     #ifdef DEBUG_SERIAL
     packet_in_fifo--;
-    #endif DEBUG_SERIAL
+    #endif //DEBUG_SERIAL
     //для отладки
 
 	//ищем следующий пакет в очереди на отправку
@@ -233,7 +244,7 @@ int x;
       }
      }//elihw дошли до конца очереди - пакетов на отправку нет
    }//fi - текущий пакет отправлен еще не до конца
-  }fi - пока нет пакетов для отправки
+  }//fi - пока нет пакетов для отправки
 }
 
 

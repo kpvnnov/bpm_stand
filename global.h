@@ -1,4 +1,9 @@
-//$Id: global.h,v 1.8 2003-05-21 20:29:46 peter Exp $
+//$Id: global.h,v 1.9 2003-05-22 16:25:23 peter Exp $
+
+
+#define DEBUG_SERIAL
+
+
 typedef unsigned char  u08;
 typedef unsigned char  u8;
 typedef          char  s08;
@@ -56,6 +61,7 @@ u8 put_packet_type3(u8 *info);
 u8 put_packet_type4(void);
 u8 write_asp_trn_fifo(u8 data_wr);
 void init_uart1(void);
+void update_diplay(void);
 
 
 
