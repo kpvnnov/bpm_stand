@@ -1,4 +1,4 @@
-// $Id: uart_c.c,v 1.1 2003-06-06 13:34:58 peter Exp $
+// $Id: uart_c.c,v 1.2 2003-10-15 12:23:15 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -147,6 +147,58 @@ extern u8 packets[MAXQUE*MAXPACKETLEN];
 
 extern u8 counts_packet; //порядковый номер пакета
 
+u8 put_packet_type3(u16 info){
+int n;
+int crc;
+int shift_fifo;
+u16* t_p;
+//u8* t_r;
+	//захватываем свободный пакет
+ disable_int_no_interrupt();
+ n=hold_packet();
+ enable_int_no_interrupt();
+ if (n==MAXQUE) {
+  #ifdef DEBUG_SERIAL
+  packet_fifo_full++;
+  #endif //DEBUG_SERIAL
+  return 0; //свободных пакетов нет
+  }
+ #ifdef DEBUG_SERIAL
+ packet_in_fifo++;
+ if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
+ #endif //DEBUG_SERIAL
+ shift_fifo=(n+1)*MAXPACKETLEN;
+	//копируем туда данные для пакета
+ t_p=(u16*)&packets[shift_fifo-DATA3PACKET];
+
+ *t_p++=results0[info];
+ *t_p++=results1[info];
+ *t_p++=results2[info];
+ *t_p++=results3[info];
+// *t_p++=results4[info];
+// *t_p++=results5[info];
+// *t_p++=results6[info];
+// *t_p++=results7[info];
+// *t_p++=results8[info];
+
+
+	//помещаем в пакет его длину (без завершающего EOFPACKET)
+ packets[shift_fifo-LENPACKET]=DATA3PACKET;
+	//помещаем (и увеличиваем) порядковый номер пакета
+ packets[shift_fifo-NUMPACKET]=counts_packet;
+ queue[n].numeric=counts_packet++;
+	//указываем тип пакета
+ packets[shift_fifo-TYPEPACKET]=0x03;
+	//подсчитываем и помещаем CRC пакета
+ crc=crc16(&packets[shift_fifo-DATA3PACKET],DATA3PACKET-2);
+ packets[shift_fifo-CRCPACKET]=crc>>8;
+ packets[shift_fifo-CRCPACKET+1]=crc;
+
+	//в справочном массиве указываем длину пакета
+ queue[n].len=DATA3PACKET;
+ queue[n].busy=NOTSENDED;
+return 1;
+}
 
 u8 put_packet_type3(u16 info){
 int n;

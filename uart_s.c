@@ -1,4 +1,4 @@
-// $Id: uart_s.c,v 1.7 2003-06-23 11:34:01 peter Exp $
+// $Id: uart_s.c,v 1.8 2003-10-15 12:23:15 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -47,16 +47,21 @@ extern u16 current_rec_packet;
 extern u16 rec_length;
 extern u16 received_packed;
 
-extern unsigned int results0[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
-extern unsigned int results1[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
-extern unsigned int results2[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
-extern unsigned int results3[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
-extern unsigned int results4[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
-//extern unsigned int results4[ADC_FIFO_RCV_LEN];
-//extern unsigned int results5[ADC_FIFO_RCV_LEN];
-//extern unsigned int results6[ADC_FIFO_RCV_LEN];
-//extern unsigned int results7[ADC_FIFO_RCV_LEN];
-//extern unsigned int results8[ADC_FIFO_RCV_LEN];
+//extern unsigned int results0[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+//extern unsigned int results1[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+//extern unsigned int results2[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+//extern unsigned int results3[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+//extern unsigned int results4[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+//extern unsigned int results5[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+//extern unsigned int results6[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+
+extern unsigned int one_count0[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+extern unsigned int one_count1[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+extern unsigned int multi_count0[NUM_MULTICHANNEL+1][ADC_FIFO_RCV_LEN];
+extern unsigned int multi_count1[NUM_MULTICHANNEL+1][ADC_FIFO_RCV_LEN];
+
+
+
 extern unsigned int results[ADC_FIFO_RCV_LEN];
 extern u16 dac[NUM_CHANEL];
 extern u16 chanel;
@@ -243,6 +248,13 @@ _________________________________________________________________
           заданного уровня давления (аварийный уровень)
      содержание пакета:
       нет
+_________________________________________________________________
+0x18      Установить биты управления режимом
+     содержание пакета:
+          в пакете 1 байт 
+            0 бит - включение напряжения на датчиках
+            1 бит - включение напряжения на аналоговой части
+    общее количество данных 1 байт
 
 */
 
@@ -256,14 +268,17 @@ _________________________________________________________________
 #define  NUM_OF_CHANNEL_DAC 6   //значение номера канала ЦАП в 8-ом пакете
 #define  VALVE_OF_CHANNEL_DAC 8 //значение для ЦАП в 8-ом пакете
 #define  LEVEL_SET	8	//значение данных в 3-х байтовом пакете
+#define  REGIM_JOB	6	//установка режимов работы
 
 #define  DATA3PACKET    24	//смещение (с конца) положения в пакете размещения данных
 #define  DATA5PACKET     (SIZE_STAT*2+6)
 #define  DATA6PACKET     (SIZE_STAT1*2+6)
 #define  DATA7PACKET     (32+6)
-#define  DATAxAPACKET    (2+4*2+2+6)
+#define  DATAxAPACKET    (2+4*NUM_MULTICHANNEL+2+6)
 
-
+#if DATAxAPACKET>=MAXPACKETLEN
+ error size of fifo packets MAXPACKETLEN
+#endif
 #define  ESCAPE		0x7D
 #define  EOFPACKET	0x7E	//код признака конца кадра
 extern volatile unsigned int  asp_trn_fifo_start;      /* serial transmit buffer start index      */
@@ -302,58 +317,6 @@ extern u8 counts_packet; //порядковый номер пакета
 
 
 
-u8 put_packet_type3(u16 info){
-int n;
-int crc;
-int shift_fifo;
-u16* t_p;
-//u8* t_r;
-	//захватываем свободный пакет
- disable_int_no_interrupt();
- n=hold_packet();
- enable_int_no_interrupt();
- if (n==MAXQUE) {
-  #ifdef DEBUG_SERIAL
-  packet_fifo_full++;
-  #endif //DEBUG_SERIAL
-  return 0; //свободных пакетов нет
-  }
- #ifdef DEBUG_SERIAL
- packet_in_fifo++;
- if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
- #endif //DEBUG_SERIAL
- shift_fifo=(n+1)*MAXPACKETLEN;
-	//копируем туда данные для пакета
- t_p=(u16*)&packets[shift_fifo-DATA3PACKET];
-
- *t_p++=results0[info];
- *t_p++=results1[info];
- *t_p++=results2[info];
- *t_p++=results3[info];
-// *t_p++=results4[info];
-// *t_p++=results5[info];
-// *t_p++=results6[info];
-// *t_p++=results7[info];
-// *t_p++=results8[info];
-
-
-	//помещаем в пакет его длину (без завершающего EOFPACKET)
- packets[shift_fifo-LENPACKET]=DATA3PACKET;
-	//помещаем (и увеличиваем) порядковый номер пакета
- packets[shift_fifo-NUMPACKET]=counts_packet;
- queue[n].numeric=counts_packet++;
-	//указываем тип пакета
- packets[shift_fifo-TYPEPACKET]=0x03;
-	//подсчитываем и помещаем CRC пакета
- crc=crc16(&packets[shift_fifo-DATA3PACKET],DATA3PACKET-2);
- packets[shift_fifo-CRCPACKET]=crc>>8;
- packets[shift_fifo-CRCPACKET+1]=crc;
-
-	//в справочном массиве указываем длину пакета
- queue[n].len=DATA3PACKET;
- queue[n].busy=NOTSENDED;
-return 1;
-}
 //отправляем пакет со статистикой
 u16 put_packet_type5(void){
 int n;
@@ -512,8 +475,8 @@ u16* t_p;
 	//копируем туда данные для пакета
  t_p=(u16*)&packets[shift_fifo-DATA7PACKET];
 
- memcpy(t_p,&results0[info*SIZE_OF_ADC_DUMP],SIZE_OF_ADC_DUMP*2);
- memcpy(t_p+SIZE_OF_ADC_DUMP,&results1[info*SIZE_OF_ADC_DUMP],SIZE_OF_ADC_DUMP*2);
+ memcpy(t_p,&one_count0[info*SIZE_OF_ADC_DUMP],SIZE_OF_ADC_DUMP*2);
+ memcpy(t_p+SIZE_OF_ADC_DUMP,&one_count1[info*SIZE_OF_ADC_DUMP],SIZE_OF_ADC_DUMP*2);
  packets[shift_fifo-DATA7PACKET+4*SIZE_OF_ADC_DUMP]=results[info];
 
 	//помещаем в пакет его длину (без завершающего EOFPACKET)
@@ -534,6 +497,7 @@ u16* t_p;
 return 1;
 }
 u8 put_packet_typeA(u16 info){
+int z;
 int n;
 int crc;
 int shift_fifo;
@@ -556,12 +520,12 @@ u16* t_p;
 	//копируем туда данные для пакета
  t_p=(u16*)&packets[shift_fifo-DATAxAPACKET];
 
- *t_p++=((results[info]&0xFF)<<8)|2;	//пока два выводимых канала
- *t_p++=results0[info];
- *t_p++=results1[info];
- *t_p++=results2[info];
- *t_p++=results3[info];
- *t_p++=results4[info];
+ *t_p++=((results[info]&0xFF)<<8)|NUM_MULTICHANNEL;//количество выводимых каналов
+ for (z=0;z<NUM_MULTICHANNEL;z++){
+  *t_p++=multi_count0[z][info];
+  *t_p++=multi_count1[z][info];
+  }
+ *t_p++=multi_count0[NUM_MULTICHANNEL][info]+multi_count1[NUM_MULTICHANNEL][info]; //температура
 
 	//помещаем в пакет его длину (без завершающего EOFPACKET)
  packets[shift_fifo-LENPACKET]=DATAxAPACKET;
@@ -636,28 +600,43 @@ u16 shift_fifo;
       break;
      case 0x15:		//установка давления при достижении которого
       break;
+     case 0x18:		//установить режимы работы
+      if (packets[shift_fifo-REGIM_JOB]&0x01) //напряжения на датчиках
+       P4OUT&=~BIT6;
+      else
+       P4OUT|=BIT6;
+      if (packets[shift_fifo-REGIM_JOB]&0x02) //напряжения на аналоговой части
+       P1OUT&=~BIT0;
+      else
+       P1OUT|=BIT0;
+      break;
      }
-    //отправить подтверждение
-    shift_fifo=(x+1)*MAXPACKETLEN;
+    //отправить подтверждение, если это не 0x01 тип пакета
+    if (packets[shift_fifo-TYPEPACKET]!=0x01){
+     shift_fifo=(x+1)*MAXPACKETLEN;
    	//помещаем порядковый номер пакета для подтверждения
-    packets[shift_fifo-NUMPACKET]=packets[x*MAXPACKETLEN+queue[x].len-NUMPACKET];
-    packets[shift_fifo-LENPACKET]=NUMPACKET;	//длина подтверждающего пакета
+     packets[shift_fifo-NUMPACKET]=packets[x*MAXPACKETLEN+queue[x].len-NUMPACKET];
+     packets[shift_fifo-LENPACKET]=NUMPACKET;	//длина подтверждающего пакета
    	//указываем тип пакета
-    packets[shift_fifo-TYPEPACKET]=0x01;		//подтверждающий пакет
+     packets[shift_fifo-TYPEPACKET]=0x01;		//подтверждающий пакет
    	//подсчитываем и помещаем CRC пакета
-    crc=crc16(&packets[shift_fifo-NUMPACKET],NUMPACKET-2);
-    packets[shift_fifo-CRCPACKET]=crc>>8;
-    packets[shift_fifo-CRCPACKET+1]=crc;
+     crc=crc16(&packets[shift_fifo-NUMPACKET],NUMPACKET-2);
+     packets[shift_fifo-CRCPACKET]=crc>>8;
+     packets[shift_fifo-CRCPACKET+1]=crc;
   
    	//в справочном массиве указываем длину пакета
-    queue[x].len=NUMPACKET;
-    #ifdef DEBUG_SERIAL
-    packet_in_fifo++;
-    if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
-    #endif //DEBUG_SERIAL
-    queue[x].busy=NOTSENDED;
+     queue[x].len=NUMPACKET;
+     #ifdef DEBUG_SERIAL
+     packet_in_fifo++;
+     if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
+     #endif //DEBUG_SERIAL
+     queue[x].busy=NOTSENDED;
+     }
+    else{ // это пакет 0x01 типа, подтверждающий
+     queue[x].busy=FREEPLACE;
+     }
     }
-   else{
+   else{ // crc не совпала
     queue[x].busy=FREEPLACE;
     }
    }

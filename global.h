@@ -1,4 +1,4 @@
-//$Id: global.h,v 1.21 2003-06-23 11:34:01 peter Exp $
+//$Id: global.h,v 1.22 2003-10-15 12:23:15 peter Exp $
 
 
 #define DEBUG_SERIAL
@@ -9,6 +9,8 @@
 
 //#define DISPLAY
 
+//Є®«ЁзҐбвў® Є ­ «®ў ў ¬г«мвЁЇ«ҐЄбЁа®ў ­­®¬ аҐ¦Ё¬Ґ
+#define  NUM_MULTICHANNEL 4
 
 
 
@@ -89,7 +91,8 @@ void set_adc_temperature(void);
 //последовательный порт
 //#define  SERIAL_FIFO_RCV_LEN  8           /* size of receive fifo serial buffer   */
 #define  SERIAL_FIFO_TRN_LEN  64           /* size of transmit fifo serial buffer   */
-#define  MAXPACKETLEN	64	//максимальная длина одного пакета
+#define  MAXPACKETLEN	56	//максимальная длина одного пакета
+#if NUM_MULTICHANNEL
 
 
 //статистика
@@ -157,8 +160,8 @@ enum chanel_job{
 	LEVEL_DOWN
        };
 
-#define open_valve()	P2OUT&=~(BIT4+BIT5);valve_hold=5
+#define open_valve()	{valve_hold=0;P2OUT&=~(BIT4+BIT5);}
 #define set_hold()      P2OUT&=~BIT5
-#define close_valve()	P2OUT|=(BIT4+BIT5)
+#define close_valve()	{valve_hold=4;P2OUT|=(BIT4+BIT5);}
 #define on_pump()	P4OUT|=BIT0
 #define off_pump()	P4OUT&=~BIT0

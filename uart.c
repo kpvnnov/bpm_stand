@@ -1,4 +1,4 @@
-// $Id: uart.c,v 1.20 2003-06-23 10:19:47 peter Exp $
+// $Id: uart.c,v 1.21 2003-10-15 12:23:15 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -321,6 +321,10 @@ HOLD_TIME_IRQ()
    if (esc_rec){
     esc_rec=0;
     packets[shift_fifo++]=received_sym^0x40;
+    rec_length++;
+    if (rec_length>=MAXPACKETLEN){ //переполнение приема (нет EOF)
+     rec_length=0;
+     }
     }
    else{
     packets[shift_fifo++]=received_sym;

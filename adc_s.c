@@ -1,5 +1,5 @@
 
-// $Id: adc_s.c,v 1.6 2003-06-23 11:34:01 peter Exp $
+// $Id: adc_s.c,v 1.7 2003-10-15 12:23:15 peter Exp $
 #include  <msp430x14x.h>
 #include "global.h"
 
@@ -15,12 +15,19 @@ extern u16 timer_sum_adc;
 extern u16 timer_sum_stat;
 extern u16 why_job;
 
-unsigned int results0[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
-unsigned int results1[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
-unsigned int results2[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
-unsigned int results3[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
-unsigned int results4[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+//unsigned int results0[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+//unsigned int results1[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+//unsigned int results2[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+//unsigned int results3[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+//unsigned int results4[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+//unsigned int results5[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+//unsigned int results6[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+
 unsigned int results[ADC_FIFO_RCV_LEN];
+unsigned int one_count0[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+unsigned int one_count1[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+unsigned int multi_count0[NUM_MULTICHANNEL+1][ADC_FIFO_RCV_LEN];
+unsigned int multi_count1[NUM_MULTICHANNEL+1][ADC_FIFO_RCV_LEN];
                                         
 unsigned int current_level;
 unsigned int what_doing;
@@ -53,15 +60,15 @@ interrupt[ADC_VECTOR] void ADC12ISR (void)
 {
 //int p=( & (ADC_FIFO_RCV_LEN-1))<<3;
 int sh;
-int sum;
+unsigned int sum,sum1;
 HOLD_TIME_IRQ()
  end_adc_conversion=1;
  if (chanel_convert&0x40){
   sh=(adc_rcv_fifo_end & (ADC_FIFO_RCV_LEN-1));
-  switch(rotate_channel){
-   case 0:
+
     sum=ADC12MEM0;
-    current_level=sum;
+    if (rotate_channel==0) 
+     current_level=sum;
     sum+=ADC12MEM2;
     sum+=ADC12MEM4;
     sum+=ADC12MEM6;
@@ -69,97 +76,65 @@ HOLD_TIME_IRQ()
     sum+=ADC12MEM10;
     sum+=ADC12MEM12;
     sum+=ADC12MEM14;
-    results0[sh]=sum;
 
-    sum=ADC12MEM1;
-    sum+=ADC12MEM3;
-    sum+=ADC12MEM5;
-    sum+=ADC12MEM7;
-    sum+=ADC12MEM9;
-    sum+=ADC12MEM11;
-    sum+=ADC12MEM13;
-    sum+=ADC12MEM15;
-    results1[sh]=sum;
+
+    sum1=ADC12MEM1;
+    sum1+=ADC12MEM3;
+    sum1+=ADC12MEM5;
+    sum1+=ADC12MEM7;
+    sum1+=ADC12MEM9;
+    sum1+=ADC12MEM11;
+    sum1+=ADC12MEM13;
+    sum1+=ADC12MEM15;
+
+    if (rotate_channel<=NUM_MULTICHANNEL){
+     multi_count0[rotate_channel][sh]=sum;
+     multi_count1[rotate_channel][sh]=sum1;
+     }
+    else rotate_channel=0; ///ошиБОЧНАЯ СИТУАЦИЯ
+
     rotate_channel++;
-    set_adc(first_channel+rotate_channel);
-    SUM_TIME_IRQ_NOSLEEP();
-    break;
-   case 1:
-    sum=ADC12MEM0;
-    sum+=ADC12MEM2;
-    sum+=ADC12MEM4;
-    sum+=ADC12MEM6;
-    sum+=ADC12MEM8;
-    sum+=ADC12MEM10;
-    sum+=ADC12MEM12;
-    sum+=ADC12MEM14;
-    results2[sh]=sum;
 
-    sum=ADC12MEM1;
-    sum+=ADC12MEM3;
-    sum+=ADC12MEM5;
-    sum+=ADC12MEM7;
-    sum+=ADC12MEM9;
-    sum+=ADC12MEM11;
-    sum+=ADC12MEM13;
-    sum+=ADC12MEM15;
-    results3[sh]=sum;
-    rotate_channel++;
-    set_adc_temperature();
-    SUM_TIME_IRQ_NOSLEEP();
-    break;
-   case 2:
-    sum=ADC12MEM0;
-    sum+=ADC12MEM2;
-    sum+=ADC12MEM4;
-    sum+=ADC12MEM6;
-    sum+=ADC12MEM8;
-    sum+=ADC12MEM10;
-    sum+=ADC12MEM12;
-    sum+=ADC12MEM14;
 
-    sum+=ADC12MEM1;
-    sum+=ADC12MEM3;
-    sum+=ADC12MEM5;
-    sum+=ADC12MEM7;
-    sum+=ADC12MEM9;
-    sum+=ADC12MEM11;
-    sum+=ADC12MEM13;
-    sum+=ADC12MEM15;
-    results4[sh]=sum;
-    results[adc_rcv_fifo_end & (ADC_FIFO_RCV_LEN-1)]=0x8000|(first_channel&0x1F);
-    adc_rcv_fifo_end++;
-    rotate_channel=0;
-    set_adc(first_channel+rotate_channel);
-    _BIC_SR_IRQ(CPUOFF);               // Clear LPM0, SET BREAKPOINT HERE
-    SUM_TIME_IRQ();
-    break;
-   default:
-    rotate_channel=0; ///ошиБОЧНАЯ СИТУАЦИЯ
-    SUM_TIME_IRQ_NOSLEEP();
-    break;
-   }//свич
+  if (rotate_channel==(NUM_MULTICHANNEL)){ //для следующего цикла устанавливаем температуру
+   set_adc_temperature(); //температура будет суммой sum и sum1
+   SUM_TIME_IRQ_NOSLEEP();
+   }
+  else
+  if (rotate_channel==(NUM_MULTICHANNEL+1)){ //для следующего цикла устанавливаем цикл с начала
+    // и выставляем данные для занесения в очередь передачи
+   results[sh]=0x8000|(first_channel&0x1F);
+   adc_rcv_fifo_end++;
+   rotate_channel=0;
+   set_adc((first_channel&0xC0)+((first_channel+rotate_channel)&0x3F));
+   _BIC_SR_IRQ(CPUOFF);               // Clear LPM0, SET BREAKPOINT HERE
+   SUM_TIME_IRQ();
+   }
+  else { //обычный цикл для следующего канала
+   set_adc((first_channel&0xC0)+((first_channel+rotate_channel)&0x3F));
+   SUM_TIME_IRQ_NOSLEEP();
+   }
   }
  else{ //"обыкновенный" парный режим
   sh=(adc_rcv_fifo_end & (ADC_FIFO_RCV_LEN-1))*SIZE_OF_ADC_DUMP;
 
-  results0[sh]   = ADC12MEM0;               
-  current_level=results0[sh];
-  results1[sh++] = ADC12MEM1;               
-  results0[sh]   = ADC12MEM2;
-  results1[sh++] = ADC12MEM3;               
-  results0[sh]   = ADC12MEM4;               
-  results1[sh++] = ADC12MEM5;               
-  results0[sh]   = ADC12MEM6;               
-  results1[sh++] = ADC12MEM7;               
-  results0[sh]   = ADC12MEM8;               
-  results1[sh++] = ADC12MEM9;               
-  results0[sh]   = ADC12MEM10;               
-  results1[sh++] = ADC12MEM11;               
-  results0[sh]   = ADC12MEM12;               
-  results1[sh++] = ADC12MEM13;               
-  results0[sh]   = ADC12MEM14;               
-  results1[sh++] = ADC12MEM15;               
+  one_count0[sh]   = ADC12MEM0;               
+  current_level=one_count0[sh];
+  one_count1[sh++] = ADC12MEM1;               
+  one_count0[sh]   = ADC12MEM2;
+  one_count1[sh++] = ADC12MEM3;               
+  one_count0[sh]   = ADC12MEM4;               
+  one_count1[sh++] = ADC12MEM5;               
+  one_count0[sh]   = ADC12MEM6;               
+  one_count1[sh++] = ADC12MEM7;               
+  one_count0[sh]   = ADC12MEM8;               
+  one_count1[sh++] = ADC12MEM9;               
+  one_count0[sh]   = ADC12MEM10;               
+  one_count1[sh++] = ADC12MEM11;               
+  one_count0[sh]   = ADC12MEM12;               
+  one_count1[sh++] = ADC12MEM13;               
+  one_count0[sh]   = ADC12MEM14;               
+  one_count1[sh++] = ADC12MEM15;               
 
   results[adc_rcv_fifo_end & (ADC_FIFO_RCV_LEN-1)]=chanel_convert&0x1F;
   adc_rcv_fifo_end++;
@@ -287,8 +262,8 @@ void set_adc(int ch){
  P3OUT&=~(BIT0|BIT1|BIT2|BIT3);
 
  if (ch&0x01) P3OUT|=BIT0;
- if (ch&0x08) P3OUT|=BIT1;
- if (ch&0x10) P3OUT|=BIT2;
+ if (ch&0x08) P3OUT|=BIT2;
+ if (ch&0x10) P3OUT|=BIT1;
  if ((ch&0x20)==0) P3OUT|=BIT3;
 
  switch((ch>>1)&0x03){

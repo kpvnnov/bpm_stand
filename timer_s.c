@@ -1,4 +1,4 @@
-// $Id: timer_s.c,v 1.5 2003-06-23 10:19:47 peter Exp $
+// $Id: timer_s.c,v 1.6 2003-10-15 12:23:15 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -65,7 +65,8 @@ extern u16 stat1_buf[STAT1_FIFO_RCV_LEN*SIZE_STAT1];
 //ADC
 extern int end_adc_conversion;
 extern int error_adc;
-extern unsigned int results0[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+extern unsigned int one_count0[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+
 //extern unsigned int results8[ADC_FIFO_RCV_LEN];
 
 extern int gradus_to_show;
@@ -288,7 +289,17 @@ HOLD_TIME_IRQ()
      //для 200 Гц необходим делитель  4608
      //для 300 Гц необходим делитель  3072
      //для 400 Гц необходим делитель  2304
-    switch(mode_timer){
+     //для 600 Гц необходим делитель  1536
+     //для 800 Гц необходим делитель  1152
+     //для1000 Гц необходим делитель   921,6
+     //для1200 Гц необходим делитель   768
+     //для1400 Гц необходим делитель   658,29
+     //для1600 Гц необходим делитель   576 
+     //для1800 Гц необходим делитель   512        
+     //для2000 Гц необходим делитель   460,8
+     //для2200 Гц необходим делитель   418,9
+     //для2400 Гц необходим делитель   384
+    switch(mode_timer){                        
      case 0: //(cчет таймера от ACLK)
       //пока ничего не делаем
       break;
@@ -297,8 +308,32 @@ HOLD_TIME_IRQ()
       CCR1 += (18432);
       #endif
       #ifdef STEND
-      if (chanel_convert&0x40) //"серийное" преобразование каналов
-       CCR1 += (2304);
+      if (chanel_convert&0x40){ //"серийное" преобразование каналов
+       #if   (NUM_MULTICHANNEL == 2) //два канала+температура*200Гц=600Гц
+        CCR1 += (1536);
+       #elif (NUM_MULTICHANNEL == 3)
+        CCR1 += (1152);
+       #elif NUM_MULTICHANNEL==4
+        CCR1 += (922);
+       #elif NUM_MULTICHANNEL==5
+        CCR1 += (768);
+       #elif NUM_MULTICHANNEL==6
+        CCR1 += (658);
+       #elif NUM_MULTICHANNEL==7
+        CCR1 += (576);
+       #elif NUM_MULTICHANNEL==8
+        CCR1 += (512);
+       #elif NUM_MULTICHANNEL==9
+        CCR1 += (461);
+       #elif NUM_MULTICHANNEL==10
+        CCR1 += (419);
+       #elif NUM_MULTICHANNEL==11
+        CCR1 += (384);
+       #else
+        error defined NUM_MULTICHANNEL
+//        CCR1 += (NUM_MULTICHANNEL);
+       #endif
+       }
       else
        CCR1 += (4608); //"парное" преобразование опорный+тест
       #endif
@@ -392,10 +427,6 @@ HOLD_TIME_IRQ()
      }
 	//сброс WatchDog
     CLEAR_DOG();	
-    if (valve_hold){
-     valve_hold--;
-     if (valve_hold==0) set_hold();
-     }
 
     #ifdef DISPLAY
     show_display();
@@ -437,6 +468,11 @@ HOLD_TIME_IRQ()
     break; //тактирование часов
 
    case 10: // overflow
+    if (valve_hold){
+     valve_hold--;
+     if (valve_hold==0) set_hold();
+     }
+
     t_stat=&stat1_buf[(stat1_rcv_fifo_end & (STAT1_FIFO_RCV_LEN-1))*SIZE_STAT1];
     *t_stat++=packet_in_fifo;
 
@@ -761,8 +797,8 @@ void redraw_display_minutes(int force){
    }
 }
 void redraw_display_voltage(int force){
-  if (force || (results0[0]!=volt_to_show)){
-   volt_to_show=results0[0];
+  if (force || (one_count0[0]!=volt_to_show)){
+   volt_to_show=one_count0[0];
    make_view_time_vol(volt_to_show);
    }
 }
