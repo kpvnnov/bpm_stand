@@ -1,5 +1,5 @@
 //******************************************************************************
-// $Id: msp_main.c,v 1.7 2003-04-03 07:27:31 peter Exp $
+// $Id: msp_main.c,v 1.8 2003-04-29 11:07:46 peter Exp $
 //  MSP-FET430X110 Demo - Demonstrate LPM3, WDT Interrupt   
 //
 //  Description; This program operates MSP430 normally in LPM3, pulsing P1.0 
@@ -186,7 +186,6 @@ void main(void)
 	// останавливаем watchdog
  WDTCTL=WDTPW|WDTHOLD;  		// Stop WDT
 	// конфигурируем ноги ввода вывода
-// WDTCTL=WDTHOLD;  		// Stop WDT
  set_pin_directions();
  run_full_speed=0;
  current_speed=0;
