@@ -1,4 +1,4 @@
-// $Id: timer_s.c,v 1.8 2003-10-17 13:15:44 peter Exp $
+// $Id: timer_s.c,v 1.9 2003-10-17 14:33:54 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -19,6 +19,7 @@ extern u16 why_job;
 
 
 extern u16 stop_transmit;
+extern u16 analog_on;
 
 
 extern unsigned int current_level;
@@ -252,6 +253,7 @@ interrupt[TIMERA0_VECTOR] void timer_a_0 (void)
 //высылаем в ЦАП значение
 void set_dac(u16 data){
 int y;
+ if (analog_on==0) return;
 // cs_on_dac();
  P2OUT&=~BIT3;
  for (y=0;y<16;y++){

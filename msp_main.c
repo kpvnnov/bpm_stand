@@ -1,5 +1,5 @@
 //********************************************************
-// $Id: msp_main.c,v 1.24 2003-10-15 16:07:57 peter Exp $
+// $Id: msp_main.c,v 1.25 2003-10-17 14:33:54 peter Exp $
 //********************************************************
 
 //#include <msp430x11x1.h>
@@ -24,6 +24,7 @@ u16 timer_diff_min;
 u16 timer_diff_max;
 u16 why_job;
 
+extern u16 analog_on;
 
 extern unsigned int what_doing;
 
@@ -251,7 +252,7 @@ void set_pin_directions(void){
   P6OUT = 0;                            // All P6.x reset
   P6SEL = 0xFF;                         // Enable A/D channel inputs
 #endif //STEND
-
+analog_on=1;
 }
 int current_speed;
 

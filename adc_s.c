@@ -1,5 +1,5 @@
 
-// $Id: adc_s.c,v 1.8 2003-10-17 13:15:42 peter Exp $
+// $Id: adc_s.c,v 1.9 2003-10-17 14:33:54 peter Exp $
 #include  <msp430x14x.h>
 #include "global.h"
 
@@ -19,6 +19,7 @@ extern u16 jitter_adc_max;
 extern u16 jitter_pusk;
 
 extern u16 stop_transmit;
+extern u16 analog_on;
 
 
 //unsigned int results0[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
@@ -294,12 +295,15 @@ void set_adc(int ch){
 
  ADC12CTL0 &= ~ENC;                     // Enable conversions
  set_dac(dac[ch&((NUM_CHANEL>>1)-1)]); //
- P3OUT&=~(BIT0|BIT1|BIT2|BIT3);
+ 
+ if (analog_on){
+  P3OUT&=~(BIT0|BIT1|BIT2|BIT3);
 
- if (ch&0x01) P3OUT|=BIT0;
- if (ch&0x08) P3OUT|=BIT2;
- if (ch&0x10) P3OUT|=BIT1;
- if ((ch&0x20)==0) P3OUT|=BIT3;
+  if (ch&0x01) P3OUT|=BIT0;
+  if (ch&0x08) P3OUT|=BIT2;
+  if (ch&0x10) P3OUT|=BIT1;
+  if ((ch&0x20)==0) P3OUT|=BIT3;
+  }
 
  switch((ch>>1)&0x03){
   case 0:

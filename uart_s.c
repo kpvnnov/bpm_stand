@@ -1,4 +1,4 @@
-// $Id: uart_s.c,v 1.10 2003-10-17 13:15:44 peter Exp $
+// $Id: uart_s.c,v 1.11 2003-10-17 14:33:54 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -16,6 +16,7 @@ extern u16 timer_sum_stat;
 extern u16 why_job;
 
 u16 stop_transmit;
+u16 analog_on;
 extern u16 chanel_convert;
 
 extern unsigned int current_level;
@@ -617,9 +618,22 @@ u16 shift_fifo;
        P4OUT|=BIT6;
 
       if (packets[shift_fifo-REGIM_JOB]&0x02) //напряжения на аналоговой части
+       {
        P1OUT&=~BIT0;
-      else
+
+       analog_on=1;
+       P2OUT|=BIT0+BIT1+BIT3;
+
+       }
+
+      else{
+       P2OUT&=~(BIT0+BIT1+BIT3);
+
+       P3OUT&=~(BIT0+BIT1+BIT2+BIT3);
+       analog_on=0;
+
        P1OUT|=BIT0;
+       }
 
       if (packets[shift_fifo-REGIM_JOB]&0x04){ //выключить АЦП
        disable_int_no_interrupt();
