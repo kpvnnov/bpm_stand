@@ -1,4 +1,4 @@
-// $Id: uart.c,v 1.5 2003-05-13 15:11:43 peter Exp $
+// $Id: uart.c,v 1.6 2003-05-14 14:18:31 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -16,7 +16,7 @@ _____
            пакета
 1          длина пакета
 2          CRC
-1          x7B - маркер пакета
+1          x7E - маркер пакета
 
 
 Тип
@@ -40,6 +40,7 @@ _____
 #define  NUMPACKET	6	//смещение (с конца) положения в пакете номера пакета
 #define  DATA3PACKET    18	//смещение (с конца) положения в пакете размещения данных
 #define  SIZEDATA3	12	//количество байт данных в пакете типа 3
+#define  EOFPACKET	0x7E	//код признака конца кадра
 volatile unsigned int  asp_trn_fifo_start;      /* serial transmit buffer start index      */
 
 unsigned int  asp_trn_fifo_end;        /* serial transmit flash buffer end index        */
@@ -83,6 +84,57 @@ int x;
   }
 return MAXQUE;
 }
+const unsigned int  CrcTable16[256]={
+    0x0000,  0x1021,  0x2042,  0x3063,  0x4084,  0x50a5,  0x60c6,  0x70e7,
+    0x8108,  0x9129,  0xa14a,  0xb16b,  0xc18c,  0xd1ad,  0xe1ce,  0xf1ef,
+    0x1231,  0x0210,  0x3273,  0x2252,  0x52b5,  0x4294,  0x72f7,  0x62d6,
+    0x9339,  0x8318,  0xb37b,  0xa35a,  0xd3bd,  0xc39c,  0xf3ff,  0xe3de,
+    0x2462,  0x3443,  0x0420,  0x1401,  0x64e6,  0x74c7,  0x44a4,  0x5485,
+    0xa56a,  0xb54b,  0x8528,  0x9509,  0xe5ee,  0xf5cf,  0xc5ac,  0xd58d,
+    0x3653,  0x2672,  0x1611,  0x0630,  0x76d7,  0x66f6,  0x5695,  0x46b4,
+    0xb75b,  0xa77a,  0x9719,  0x8738,  0xf7df,  0xe7fe,  0xd79d,  0xc7bc,
+    0x48c4,  0x58e5,  0x6886,  0x78a7,  0x0840,  0x1861,  0x2802,  0x3823,
+    0xc9cc,  0xd9ed,  0xe98e,  0xf9af,  0x8948,  0x9969,  0xa90a,  0xb92b,
+    0x5af5,  0x4ad4,  0x7ab7,  0x6a96,  0x1a71,  0x0a50,  0x3a33,  0x2a12,
+    0xdbfd,  0xcbdc,  0xfbbf,  0xeb9e,  0x9b79,  0x8b58,  0xbb3b,  0xab1a,
+    0x6ca6,  0x7c87,  0x4ce4,  0x5cc5,  0x2c22,  0x3c03,  0x0c60,  0x1c41,
+    0xedae,  0xfd8f,  0xcdec,  0xddcd,  0xad2a,  0xbd0b,  0x8d68,  0x9d49,
+    0x7e97,  0x6eb6,  0x5ed5,  0x4ef4,  0x3e13,  0x2e32,  0x1e51,  0x0e70,
+    0xff9f,  0xefbe,  0xdfdd,  0xcffc,  0xbf1b,  0xaf3a,  0x9f59,  0x8f78,
+    0x9188,  0x81a9,  0xb1ca,  0xa1eb,  0xd10c,  0xc12d,  0xf14e,  0xe16f,
+    0x1080,  0x00a1,  0x30c2,  0x20e3,  0x5004,  0x4025,  0x7046,  0x6067,
+    0x83b9,  0x9398,  0xa3fb,  0xb3da,  0xc33d,  0xd31c,  0xe37f,  0xf35e,
+    0x02b1,  0x1290,  0x22f3,  0x32d2,  0x4235,  0x5214,  0x6277,  0x7256,
+    0xb5ea,  0xa5cb,  0x95a8,  0x8589,  0xf56e,  0xe54f,  0xd52c,  0xc50d,
+    0x34e2,  0x24c3,  0x14a0,  0x0481,  0x7466,  0x6447,  0x5424,  0x4405,
+    0xa7db,  0xb7fa,  0x8799,  0x97b8,  0xe75f,  0xf77e,  0xc71d,  0xd73c,
+    0x26d3,  0x36f2,  0x0691,  0x16b0,  0x6657,  0x7676,  0x4615,  0x5634,
+    0xd94c,  0xc96d,  0xf90e,  0xe92f,  0x99c8,  0x89e9,  0xb98a,  0xa9ab,
+    0x5844,  0x4865,  0x7806,  0x6827,  0x18c0,  0x08e1,  0x3882,  0x28a3,
+    0xcb7d,  0xdb5c,  0xeb3f,  0xfb1e,  0x8bf9,  0x9bd8,  0xabbb,  0xbb9a,
+    0x4a75,  0x5a54,  0x6a37,  0x7a16,  0x0af1,  0x1ad0,  0x2ab3,  0x3a92,
+    0xfd2e,  0xed0f,  0xdd6c,  0xcd4d,  0xbdaa,  0xad8b,  0x9de8,  0x8dc9,
+    0x7c26,  0x6c07,  0x5c64,  0x4c45,  0x3ca2,  0x2c83,  0x1ce0,  0x0cc1,
+    0xef1f,  0xff3e,  0xcf5d,  0xdf7c,  0xaf9b,  0xbfba,  0x8fd9,  0x9ff8,
+    0x6e17,  0x7e36,  0x4e55,  0x5e74,  0x2e93,  0x3eb2,  0x0ed1,  0x1ef0};
+//0x6e17,  0x7e36,  0x4e55,  0x5e74,  0x2e93,  0x3eb2,  0x0ed1,  0x1ef0
+
+
+unsigned int  update_crc_16(unsigned char octet,unsigned int crc)
+{
+ return  CrcTable16[((crc>>8) ^ octet) & 0xFF] ^ ((crc<<8) & 0xFF00);
+
+}
+
+
+unsigned int crc16(void* massiv, unsigned int len){
+unsigned int crc=0x0000;
+unsigned int c;
+unsigned char*m=(unsigned char*)massiv;
+for (c=0;c<len;c++)
+ crc=update_crc_16(m[c],crc);
+return crc;
+}
 
 u8 put_packet_type3(u8 *info){
 int n;
@@ -92,13 +144,61 @@ int crc;
  packets[(n+1)*MAXPACKETLEN-LENPACKET]=DATA3PACKET;
  packets[(n+1)*MAXPACKETLEN-NUMPACKET]=counts_packet++;
  packets[(n+1)*MAXPACKETLEN-TYPEPACKET]=0x03;
- packets[(n+1)*MAXPACKETLEN-CRCPACKET]=0xFF;
- packets[(n+1)*MAXPACKETLEN-CRCPACKET+1]=0xFF;
- crc=crc16(&packets[(n+1)*MAXPACKETLEN-DATA3PACKET],DATA3PACKET);
- packets[(n+1)*MAXPACKETLEN-CRCPACKET]=crc;
- packets[(n+1)*MAXPACKETLEN-CRCPACKET+1]=crc<<8;
+// packets[(n+1)*MAXPACKETLEN-CRCPACKET]=0xFF;
+// packets[(n+1)*MAXPACKETLEN-CRCPACKET+1]=0xFF;
+ crc=crc16(&packets[(n+1)*MAXPACKETLEN-DATA3PACKET],DATA3PACKET-3);
+ packets[(n+1)*MAXPACKETLEN-CRCPACKET]=crc>>8;
+ packets[(n+1)*MAXPACKETLEN-CRCPACKET+1]=crc;
+
+//отладка
+// packets[(n+1)*MAXPACKETLEN-19]='K';
+// packets[(n+1)*MAXPACKETLEN-18]='J';
+//  packets[(n+1)*MAXPACKETLEN-17]='H';
+//  packets[(n+1)*MAXPACKETLEN-16]='G';
+//  packets[(n+1)*MAXPACKETLEN-15]='F';
+//  packets[(n+1)*MAXPACKETLEN-14]='D';
+//  packets[(n+1)*MAXPACKETLEN-13]='S';
+//  packets[(n+1)*MAXPACKETLEN-12]='A';
+//  packets[(n+1)*MAXPACKETLEN-11]='P';
+//  packets[(n+1)*MAXPACKETLEN-10]='O';
+//  packets[(n+1)*MAXPACKETLEN-9]='I';
+//  packets[(n+1)*MAXPACKETLEN-8]='U';
+//  packets[(n+1)*MAXPACKETLEN-7]='Y';
+//  packets[(n+1)*MAXPACKETLEN-6]='T';
+//  packets[(n+1)*MAXPACKETLEN-5]='R';
+//  packets[(n+1)*MAXPACKETLEN-4]='E';
+//  packets[(n+1)*MAXPACKETLEN-3]='W';
+//  packets[(n+1)*MAXPACKETLEN-2]='Q';
+//
+
+
+
+
+ packets[(n+1)*MAXPACKETLEN-1]=EOFPACKET;
  queue[n].numeric=packets[(n+1)*MAXPACKETLEN-NUMPACKET];
  queue[n].len=DATA3PACKET;
+ queue[n].busy=NOTSENDED;
+return 1;
+}
+u8 put_packet_type4(void){
+int n;
+int crc;
+ while ((n=hold_packet())==MAXQUE) ; //захватываем свободный пакет
+ packets[(n+1)*MAXPACKETLEN-11]='0';
+ packets[(n+1)*MAXPACKETLEN-10]='9';
+ packets[(n+1)*MAXPACKETLEN-9]='8';
+ packets[(n+1)*MAXPACKETLEN-8]='7';
+ packets[(n+1)*MAXPACKETLEN-7]='6';
+ packets[(n+1)*MAXPACKETLEN-6]='5';
+ packets[(n+1)*MAXPACKETLEN-5]='4';
+ packets[(n+1)*MAXPACKETLEN-4]='3';
+ packets[(n+1)*MAXPACKETLEN-3]='2';
+ packets[(n+1)*MAXPACKETLEN-2]='1';
+ crc=crc16(&packets[(n+1)*MAXPACKETLEN-13],10);
+ packets[(n+1)*MAXPACKETLEN-CRCPACKET]=crc>>8;
+ packets[(n+1)*MAXPACKETLEN-CRCPACKET+1]=crc;
+ packets[(n+1)*MAXPACKETLEN-1]=EOFPACKET;
+ queue[n].len=13;
  queue[n].busy=NOTSENDED;
 return 1;
 }
@@ -115,6 +215,7 @@ u16 ostatok;
   }
 }
 
+//u8 test[4]={'0','1','2','3'};
 void work_serial_transmit(void){
 int x;
 for (x=0;x<MAXQUE;x++){
@@ -123,6 +224,7 @@ for (x=0;x<MAXQUE;x++){
 //отладка   queue[x].busy=WAIT_ACK;
    queue[x].busy=FREEPLACE; 	//для отладки
    send_full_massiv(&packets[(x+1)*MAXPACKETLEN-queue[x].len],queue[x].len);
+//отладка      send_full_massiv(test,4);
    return;
 //   break;
   }
@@ -145,9 +247,14 @@ int x;
 
   UCTL1 = CHAR;                         // 8-bit character
   UTCTL1 = SSEL1;                       // UCLK = SMCLK
-  UBR01 = 0x45;                         // 8Mhz/115200 - 69.44
-  UBR11 = 0x00;                         //
-  UMCTL1 = 0x2C;                        // modulation
+//  UBR01 = 0x45;                         // 8Mhz/115200 - 69.44
+//  UBR11 = 0x00;                         //
+//  UMCTL1 = 0x2C;                        // modulation
+
+  UBR01 = 0x80;                         //7.372.800/19200 = 384 (0x180)
+  UBR11 = 0x01;                         //
+  UMCTL1 = 0x00;                        // no modulation
+
   ME2 |= UTXE1 + URXE1;                 // Enable USART1 TXD/RXD
   IE2 |= URXIE1;			// Enable USART1 RX+TX interrupt
 //+ UTXIE1;                
@@ -262,6 +369,3 @@ u8 write_asp_trn_fifo(u8 data_wr){
  return 1;
 }
 
-unsigned int crc16(void* massiv,int len){
-return 0;
-}
