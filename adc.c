@@ -1,5 +1,5 @@
 
-// $Id: adc.c,v 1.5 2003-05-16 14:57:04 peter Exp $
+// $Id: adc.c,v 1.6 2003-05-21 16:41:22 peter Exp $
 #include  <msp430x14x.h>
 #include "global.h"
 
@@ -35,9 +35,9 @@ int p=(adc_rcv_fifo_end & (ADC_FIFO_RCV_LEN-1))<<3;
 
 
 void init_adc(void){
-  ADC12CTL0 = ADC12ON+REFON+MSC+SHT0_6;    // Turn on ADC12, set sampling time
+  ADC12CTL0 = ADC12ON+REFON+MSC+SHT0_11+SHT1_11;    // Turn on ADC12, set sampling time
 //REF2_5V
-  ADC12CTL1 = SHP+CONSEQ_1;             // Use sampling timer, single sequence
+  ADC12CTL1 = ADC12SSEL_3+ADC12DIV_7+SHP+CONSEQ_1;             // Use sampling timer, single sequence
   ADC12MCTL0 = INCH_0;                  // ref+=AVcc, channel = A0
   ADC12MCTL1 = INCH_1;                  // ref+=AVcc, channel = A1
   ADC12MCTL2 = INCH_2;                  // ref+=AVcc, channel = A2    

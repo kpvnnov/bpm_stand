@@ -1,4 +1,4 @@
-//$Id: global.h,v 1.6 2003-05-16 19:29:08 peter Exp $
+//$Id: global.h,v 1.7 2003-05-21 16:41:22 peter Exp $
 typedef unsigned char  u08;
 typedef unsigned char  u8;
 typedef          char  s08;
@@ -54,7 +54,7 @@ u16 send_serial_massiv(u8* data,u16 len);
 void work_with_adc_put(void);
 u8 put_packet_type3(u8 *info);
 u8 put_packet_type4(void);
-
+u8 write_asp_trn_fifo(u8 data_wr);
 void init_uart1(void);
 
 

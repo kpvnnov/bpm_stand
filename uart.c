@@ -1,4 +1,4 @@
-// $Id: uart.c,v 1.8 2003-05-16 19:29:08 peter Exp $
+// $Id: uart.c,v 1.9 2003-05-21 16:41:22 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -40,6 +40,7 @@ _____
 #define  NUMPACKET	5	//смещение (с конца) положения в пакете номера пакета
 #define  DATA3PACKET    17	//смещение (с конца) положения в пакете размещения данных
 #define  SIZEDATA3	12	//количество байт данных в пакете типа 3
+#define  ESCAPE		0x7D
 #define  EOFPACKET	0x7E	//код признака конца кадра
 volatile unsigned int  asp_trn_fifo_start;      /* serial transmit buffer start index      */
 
@@ -150,7 +151,7 @@ int crc;
 	//указываем тип пакета
  packets[(n+1)*MAXPACKETLEN-TYPEPACKET]=0x03;
 	//подсчитываем и помещаем CRC пакета
- crc=crc16(&packets[(n+1)*MAXPACKETLEN-DATA3PACKET],DATA3PACKET-3);
+ crc=crc16(&packets[(n+1)*MAXPACKETLEN-DATA3PACKET],DATA3PACKET-2);
  packets[(n+1)*MAXPACKETLEN-CRCPACKET]=crc>>8;
  packets[(n+1)*MAXPACKETLEN-CRCPACKET+1]=crc;
 
@@ -172,10 +173,10 @@ int crc;
  packets[(n+1)*MAXPACKETLEN-5]='4';
  packets[(n+1)*MAXPACKETLEN-4]='3';
  packets[(n+1)*MAXPACKETLEN-3]='2';
- crc=crc16(&packets[(n+1)*MAXPACKETLEN-13],10);
+ crc=crc16(&packets[(n+1)*MAXPACKETLEN-13],11);
  packets[(n+1)*MAXPACKETLEN-CRCPACKET]=crc>>8;
  packets[(n+1)*MAXPACKETLEN-CRCPACKET+1]=crc;
- queue[n].len=12;
+ queue[n].len=13;
  queue[n].busy=NOTSENDED;
 return 1;
 }
