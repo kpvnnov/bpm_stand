@@ -1,4 +1,4 @@
-// $Id: uart_p.c,v 1.1 2004-03-07 21:31:50 peter Exp $
+// $Id: uart_p.c,v 1.2 2004-03-17 11:34:16 peter Exp $
 /* модуль работы с пакетами */
 
 //типы переменных
@@ -10,6 +10,10 @@
 #ifdef STEND
 #include "uart_s.h"
 #endif // STEND
+
+#ifdef LOADER
+#include "uart_l.h"
+#endif // LOADER
 
 // "inline" функции для 149 процессора
 #include "m149.h"
@@ -31,7 +35,7 @@ u8 counts_packet;
 
 // "захват" пакета для работы с ним 
 // должен вызываться с запрещенными прерываниями
-int hold_packet(void){
+u16 hold_packet(void){
 int x;
  for (x=0;x<MAXQUE;x++){
   switch(queue[x].busy){
@@ -48,7 +52,7 @@ return MAXQUE;
 //          x - необходимые данные занесены, номер пакета
 u16 put_packet(void){
 u16 num_packet;
-	//захватываем свободный пакет
+        //захватываем свободный пакет
  disable_int_no_interrupt();
  num_packet=hold_packet();
  enable_int_no_interrupt();
@@ -69,15 +73,15 @@ u16 num_packet;
 }
 
 const unsigned int  len_of_packets[]={
-	DATA0PACKET,
-	DATA1PACKET,
-	DATA2PACKET,
-	DATA3PACKET,
-	DATA4PACKET,
-	DATA5PACKET,
-	DATA6PACKET,
-	DATA7PACKET,
-	DATA8PACKET};
+        DATA0PACKET,
+        DATA1PACKET,
+        DATA2PACKET,
+        DATA3PACKET,
+        DATA4PACKET,
+        DATA5PACKET,
+        DATA6PACKET,
+        DATA7PACKET,
+        DATA8PACKET};
 
 // заполнить пакет данными, номер пакета передается уже +1
 void fill_date_packet(u8 type_packet, u16 num_packet){

@@ -1,4 +1,4 @@
-// $Id: uart_s.c,v 1.13 2004-03-07 21:31:50 peter Exp $
+// $Id: uart_s.c,v 1.14 2004-03-17 11:34:16 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 
@@ -238,7 +238,7 @@ _________________________________________________________________
           0x11
     общее количество данных 1 байт
 _________________________________________________________________
-0x11	  служебный пакет сигнализирующий о истечении
+0x11      служебный пакет сигнализирующий о истечении
           таймаута накачки
      содержание пакета:
       нет
@@ -284,11 +284,11 @@ _________________________________________________________________
 
     общее количество данных 1 байт
 _________________________________________________________________
-0x19	  Данные температуры
+0x19      Данные температуры
      содержание пакета:
       2 байта - измеренное значение
 _________________________________________________________________
-0x1A	  Данные коррекции температуры (раз в секунду)
+0x1A      Данные коррекции температуры (раз в секунду)
      содержание пакета:
       2 байта - наклон
       2 байта - смещение
@@ -300,18 +300,16 @@ _________________________________________________________________
 */
 
 
-#define  CRCPACKET	2	//смещение (с конца) положения в пакете CRC
-#define  LENPACKET	3	//смещение (с конца) положения в пакете длины пакета
-#define  TYPEPACKET     4	//смещение (с конца) положения в пакете типа пакета
-#define  NUMPACKET	5	//смещение (с конца) положения в пакете номера пакета
+#define  CRCPACKET      2       //смещение (с конца) положения в пакете CRC
+#define  LENPACKET      3       //смещение (с конца) положения в пакете длины пакета
+#define  TYPEPACKET     4       //смещение (с конца) положения в пакете типа пакета
+#define  NUMPACKET      5       //смещение (с конца) положения в пакете номера пакета
 #define  CHANNEL_TO_SET 6       //значение номера канала АЦП в 9-ом пакете
 #define  NUM_OF_CHANNEL_DAC 6   //значение номера канала ЦАП в 8-ом пакете
 #define  VALVE_OF_CHANNEL_DAC 8 //значение для ЦАП в 8-ом пакете
-#define  LEVEL_SET	8	//значение данных в 3-х байтовом пакете
-#define  REGIM_JOB	6	//установка режимов работы
+#define  LEVEL_SET      8       //значение данных в 3-х байтовом пакете
+#define  REGIM_JOB      6       //установка режимов работы
 
-#define  ESCAPE		0x7D
-#define  EOFPACKET	0x7E	//код признака конца кадра
 extern volatile unsigned int  asp_trn_fifo_start;      /* serial transmit buffer start index      */
 
 extern unsigned int  asp_trn_fifo_end;        /* serial transmit flash buffer end index        */
@@ -323,19 +321,19 @@ extern u16   asp_trn_fifo_buf[SERIAL_FIFO_TRN_LEN];           /* storage for ser
 
 //u8    asp_rcv_fifo_buf[SERIAL_FIFO_RCV_LEN];           /* storage for receive transmit  buffer      */
 
-#define FREEPLACE 0	//свободный пакет
-#define PACKBUSY  1	//занятый под обработку
-#define NOTSENDED 2	//неотправленный пакет
+#define FREEPLACE 0     //свободный пакет
+#define PACKBUSY  1     //занятый под обработку
+#define NOTSENDED 2     //неотправленный пакет
 #define WAIT_ACK  3     //ожидающий подтверждения
-#define PACKREC   4	//принятый пакет
+#define PACKREC   4     //принятый пакет
 
 struct que{
  u8 busy;    //место занято. 
-		//0 - свободно
-		//1 - занято
-		//2 не передано (необходимо подтверждение)
-		//3 передано (ждем подтверждения)
-		//4 не передано (подтверждения не потребуется)
+                //0 - свободно
+                //1 - занято
+                //2 не передано (необходимо подтверждение)
+                //3 передано (ждем подтверждения)
+                //4 не передано (подтверждения не потребуется)
  u8 numeric; //порядковый номер пакета
  u8 len;
 };
@@ -356,7 +354,7 @@ int crc;
 int shift_fifo;
 //u16* t_p;
 //u16* t_s;
-	//захватываем свободный пакет
+        //захватываем свободный пакет
  disable_int_no_interrupt();
  n=hold_packet();
  enable_int_no_interrupt();
@@ -371,7 +369,7 @@ int shift_fifo;
  if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
  #endif //DEBUG_SERIAL
  shift_fifo=(n+1)*MAXPACKETLEN;
-	//копируем туда данные для пакета
+        //копируем туда данные для пакета
 // t_p=(u16*)&packets[shift_fifo-DATA5PACKET];
 // t_s=(u16*)&stat_buf[(stat_rcv_fifo_start & (STAT_FIFO_RCV_LEN-1))*SIZE_STAT];
 
@@ -383,19 +381,19 @@ int shift_fifo;
  stat_rcv_fifo_start++;
 
 
-	//помещаем в пакет его длину (без завершающего EOFPACKET)
+        //помещаем в пакет его длину (без завершающего EOFPACKET)
  packets[shift_fifo-LENPACKET]=DATA5PACKET;
-	//помещаем (и увеличиваем) порядковый номер пакета
+        //помещаем (и увеличиваем) порядковый номер пакета
  packets[shift_fifo-NUMPACKET]=counts_packet;
  queue[n].numeric=counts_packet++;
-	//указываем тип пакета
+        //указываем тип пакета
  packets[shift_fifo-TYPEPACKET]=0x05;
-	//подсчитываем и помещаем CRC пакета
+        //подсчитываем и помещаем CRC пакета
  crc=crc16(&packets[shift_fifo-DATA5PACKET],DATA5PACKET-2);
  packets[shift_fifo-CRCPACKET]=crc>>8;
  packets[shift_fifo-CRCPACKET+1]=crc;
 
-	//в справочном массиве указываем длину пакета
+        //в справочном массиве указываем длину пакета
  queue[n].len=DATA5PACKET;
  queue[n].busy=NOTSENDED;
 return 1;
@@ -405,7 +403,7 @@ int n;
 //int x;
 int crc;
 int shift_fifo;
-	//захватываем свободный пакет
+        //захватываем свободный пакет
  disable_int_no_interrupt();
  n=hold_packet();
  enable_int_no_interrupt();
@@ -420,26 +418,26 @@ int shift_fifo;
  if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
  #endif //DEBUG_SERIAL
  shift_fifo=(n+1)*MAXPACKETLEN;
-	//копируем туда данные для пакета
+        //копируем туда данные для пакета
  memcpy(&packets[shift_fifo-DATA6PACKET],&stat1_buf[(stat1_rcv_fifo_start & (STAT1_FIFO_RCV_LEN-1))*SIZE_STAT1],SIZE_STAT1*2);
 
 
  stat1_rcv_fifo_start++;
 
 
-	//помещаем в пакет его длину (без завершающего EOFPACKET)
+        //помещаем в пакет его длину (без завершающего EOFPACKET)
  packets[shift_fifo-LENPACKET]=DATA6PACKET;
-	//помещаем (и увеличиваем) порядковый номер пакета
+        //помещаем (и увеличиваем) порядковый номер пакета
  packets[shift_fifo-NUMPACKET]=counts_packet;
  queue[n].numeric=counts_packet++;
-	//указываем тип пакета
+        //указываем тип пакета
  packets[shift_fifo-TYPEPACKET]=0x06;
-	//подсчитываем и помещаем CRC пакета
+        //подсчитываем и помещаем CRC пакета
  crc=crc16(&packets[shift_fifo-DATA6PACKET],DATA6PACKET-2);
  packets[shift_fifo-CRCPACKET]=crc>>8;
  packets[shift_fifo-CRCPACKET+1]=crc;
 
-	//в справочном массиве указываем длину пакета
+        //в справочном массиве указываем длину пакета
  queue[n].len=DATA6PACKET;
  queue[n].busy=NOTSENDED;
 return 1;
@@ -448,7 +446,7 @@ u8 put_packet_type4(void){
 int n;
 int crc;
 int shift_fifo;
-	//захватываем свободный пакет
+        //захватываем свободный пакет
  disable_int_no_interrupt();
  n=hold_packet();
  enable_int_no_interrupt();
@@ -488,7 +486,7 @@ int crc;
 int shift_fifo;
 u16* t_p;
 //u8* t_r;
-	//захватываем свободный пакет
+        //захватываем свободный пакет
  disable_int_no_interrupt();
  n=hold_packet();
  enable_int_no_interrupt();
@@ -503,26 +501,26 @@ u16* t_p;
  if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
  #endif //DEBUG_SERIAL
  shift_fifo=(n+1)*MAXPACKETLEN;
-	//копируем туда данные для пакета
+        //копируем туда данные для пакета
  t_p=(u16*)&packets[shift_fifo-DATA7PACKET];
 
  memcpy(t_p,&one_count0[info*SIZE_OF_ADC_DUMP],SIZE_OF_ADC_DUMP*2);
  memcpy(t_p+SIZE_OF_ADC_DUMP,&one_count1[info*SIZE_OF_ADC_DUMP],SIZE_OF_ADC_DUMP*2);
  packets[shift_fifo-DATA7PACKET+4*SIZE_OF_ADC_DUMP]=results[info];
 
-	//помещаем в пакет его длину (без завершающего EOFPACKET)
+        //помещаем в пакет его длину (без завершающего EOFPACKET)
  packets[shift_fifo-LENPACKET]=DATA7PACKET;
-	//помещаем (и увеличиваем) порядковый номер пакета
+        //помещаем (и увеличиваем) порядковый номер пакета
  packets[shift_fifo-NUMPACKET]=counts_packet;
  queue[n].numeric=counts_packet++;
-	//указываем тип пакета
+        //указываем тип пакета
  packets[shift_fifo-TYPEPACKET]=0x07;
-	//подсчитываем и помещаем CRC пакета
+        //подсчитываем и помещаем CRC пакета
  crc=crc16(&packets[shift_fifo-DATA7PACKET],DATA7PACKET-2);
  packets[shift_fifo-CRCPACKET]=crc>>8;
  packets[shift_fifo-CRCPACKET+1]=crc;
 
-	//в справочном массиве указываем длину пакета
+        //в справочном массиве указываем длину пакета
  queue[n].len=DATA7PACKET;
  queue[n].busy=NOTSENDED;
 return 1;
@@ -533,7 +531,7 @@ int n;
 int crc;
 int shift_fifo;
 u16* t_p;
-	//захватываем свободный пакет
+        //захватываем свободный пакет
  disable_int_no_interrupt();
  n=hold_packet();
  enable_int_no_interrupt();
@@ -548,7 +546,7 @@ u16* t_p;
  if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
  #endif //DEBUG_SERIAL
  shift_fifo=(n+1)*MAXPACKETLEN;
-	//копируем туда данные для пакета
+        //копируем туда данные для пакета
  t_p=(u16*)&packets[shift_fifo-DATAxAPACKET];
 
  *t_p++=((results[info]&0xFF)<<8)|NUM_MULTICHANNEL;//количество выводимых каналов
@@ -558,19 +556,19 @@ u16* t_p;
   }
 // *t_p++=multi_count0[NUM_MULTICHANNEL][info]+multi_count1[NUM_MULTICHANNEL][info]; //температура
 
-	//помещаем в пакет его длину (без завершающего EOFPACKET)
+        //помещаем в пакет его длину (без завершающего EOFPACKET)
  packets[shift_fifo-LENPACKET]=DATAxAPACKET;
-	//помещаем (и увеличиваем) порядковый номер пакета
+        //помещаем (и увеличиваем) порядковый номер пакета
  packets[shift_fifo-NUMPACKET]=counts_packet;
  queue[n].numeric=counts_packet++;
-	//указываем тип пакета
+        //указываем тип пакета
  packets[shift_fifo-TYPEPACKET]=0x0A;
-	//подсчитываем и помещаем CRC пакета
+        //подсчитываем и помещаем CRC пакета
  crc=crc16(&packets[shift_fifo-DATAxAPACKET],DATAxAPACKET-2);
  packets[shift_fifo-CRCPACKET]=crc>>8;
  packets[shift_fifo-CRCPACKET+1]=crc;
 
-	//в справочном массиве указываем длину пакета
+        //в справочном массиве указываем длину пакета
  queue[n].len=DATAxAPACKET;
  queue[n].busy=NOTSENDED;
 return 1;
@@ -581,7 +579,7 @@ int n;
 int crc;
 int shift_fifo;
 u16* t_p;
-	//захватываем свободный пакет
+        //захватываем свободный пакет
  disable_int_no_interrupt();
  n=hold_packet();
  enable_int_no_interrupt();
@@ -596,24 +594,24 @@ u16* t_p;
  if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
  #endif //DEBUG_SERIAL
  shift_fifo=(n+1)*MAXPACKETLEN;
-	//копируем туда данные для пакета
+        //копируем туда данные для пакета
  t_p=(u16*)&packets[shift_fifo-DATA19PACKET];
 
  *t_p++=multi_count0[0][info];//температура
 
-	//помещаем в пакет его длину (без завершающего EOFPACKET)
+        //помещаем в пакет его длину (без завершающего EOFPACKET)
  packets[shift_fifo-LENPACKET]=DATA19PACKET;
-	//помещаем (и увеличиваем) порядковый номер пакета
+        //помещаем (и увеличиваем) порядковый номер пакета
  packets[shift_fifo-NUMPACKET]=counts_packet;
  queue[n].numeric=counts_packet++;
-	//указываем тип пакета
+        //указываем тип пакета
  packets[shift_fifo-TYPEPACKET]=0x19;
-	//подсчитываем и помещаем CRC пакета
+        //подсчитываем и помещаем CRC пакета
  crc=crc16(&packets[shift_fifo-DATA19PACKET],DATA19PACKET-2);
  packets[shift_fifo-CRCPACKET]=crc>>8;
  packets[shift_fifo-CRCPACKET+1]=crc;
 
-	//в справочном массиве указываем длину пакета
+        //в справочном массиве указываем длину пакета
  queue[n].len=DATA19PACKET;
  queue[n].busy=NOTSENDED;
 return 1;
@@ -624,7 +622,7 @@ u16* t_p;
 int n;
 int crc;
 int shift_fifo;
-	//захватываем свободный пакет
+        //захватываем свободный пакет
  disable_int_no_interrupt();
  n=hold_packet();
  enable_int_no_interrupt();
@@ -640,42 +638,42 @@ int shift_fifo;
  #endif //DEBUG_SERIAL
 
  shift_fifo=(n+1)*MAXPACKETLEN;
-	//копируем туда данные для пакета
+        //копируем туда данные для пакета
  t_p=(u16*)&packets[shift_fifo-DATA1APACKET];
 
 #if   STEND_N == 1
- *t_p++=41294;	//наклон
- *t_p++=42148;	//смещение
- *t_p++=43344;	//значение АЦП (первая точка)
- *t_p++=2266;	//значение температуры умноженное на 100 (первая точка)
- *t_p++=43680;	//значение АЦП (вторая точка)
- *t_p++=4460;	//значение температуры умноженное на 100 (вторая точка)
+ *t_p++=41294;  //наклон
+ *t_p++=42148;  //смещение
+ *t_p++=43344;  //значение АЦП (первая точка)
+ *t_p++=2266;   //значение температуры умноженное на 100 (первая точка)
+ *t_p++=43680;  //значение АЦП (вторая точка)
+ *t_p++=4460;   //значение температуры умноженное на 100 (вторая точка)
  warning!!!
 
 #elif STEND_N == 2
- *t_p++=41294;	//наклон
- *t_p++=42148;	//смещение
- *t_p++=43344;	//значение АЦП (первая точка)
- *t_p++=2266;	//значение температуры умноженное на 100 (первая точка)
- *t_p++=43680;	//значение АЦП (вторая точка)
- *t_p++=4460;	//значение температуры умноженное на 100 (вторая точка)
+ *t_p++=41294;  //наклон
+ *t_p++=42148;  //смещение
+ *t_p++=43344;  //значение АЦП (первая точка)
+ *t_p++=2266;   //значение температуры умноженное на 100 (первая точка)
+ *t_p++=43680;  //значение АЦП (вторая точка)
+ *t_p++=4460;   //значение температуры умноженное на 100 (вторая точка)
 #else
  warning!!!
 #endif 
 
-	//помещаем в пакет его длину (без завершающего EOFPACKET)
+        //помещаем в пакет его длину (без завершающего EOFPACKET)
  packets[shift_fifo-LENPACKET]=DATA1APACKET;
-	//помещаем (и увеличиваем) порядковый номер пакета
+        //помещаем (и увеличиваем) порядковый номер пакета
  packets[shift_fifo-NUMPACKET]=counts_packet;
  queue[n].numeric=counts_packet++;
-	//указываем тип пакета
+        //указываем тип пакета
  packets[shift_fifo-TYPEPACKET]=0x1A;
-	//подсчитываем и помещаем CRC пакета
+        //подсчитываем и помещаем CRC пакета
  crc=crc16(&packets[shift_fifo-DATA1APACKET],DATA1APACKET-2);
  packets[shift_fifo-CRCPACKET]=crc>>8;
  packets[shift_fifo-CRCPACKET+1]=crc;
 
-	//в справочном массиве указываем длину пакета
+        //в справочном массиве указываем длину пакета
  queue[n].len=DATA1APACKET;
  queue[n].busy=NOTSENDED;
 send_correction_temperature=0;
@@ -700,12 +698,12 @@ u16 shift_fifo;
      case 0x09:
       chanel=packets[shift_fifo-CHANNEL_TO_SET];
       break;
-     case 0x0B:		//закрыть клапан
+     case 0x0B:         //закрыть клапан
       break;
-     case 0x0C:		//открыть клапан
+     case 0x0C:         //открыть клапан
       break;
-     case 0x0D:		//спустить давление до требуемой величины
-	//     содержание пакета:
+     case 0x0D:         //спустить давление до требуемой величины
+        //     содержание пакета:
         //  в пакете слово (+1 байт reserved) - абсолютное 
         //  значение до которого  необходимо опуститься и закрыть клапан
         //  12 бит текущего опорного (основного или резервного)
@@ -718,8 +716,8 @@ u16 shift_fifo;
        off_pump();
        what_doing=LEVEL_DOWN;
       break;
-     case 0x0E:		//накачать давление до указанной величины
-	//     содержание пакета:
+     case 0x0E:         //накачать давление до указанной величины
+        //     содержание пакета:
         //  в пакете слово (+1 байт reserved) - абсолютное 
         //  значение до которого необходимо накачать давление
         //  предварительно необходимо дать комманду
@@ -732,11 +730,11 @@ u16 shift_fifo;
        on_pump();
        what_doing=LEVEL_UP;
       break;
-     case 0x0F:		//выключить компрессор. Данная команда прекращает
+     case 0x0F:         //выключить компрессор. Данная команда прекращает
       break;
-     case 0x15:		//установка давления при достижении которого
+     case 0x15:         //установка давления при достижении которого
       break;
-     case 0x18:		//установить режимы работы
+     case 0x18:         //установить режимы работы
       if (packets[shift_fifo-REGIM_JOB]&0x01) //напряжения на датчиках
        P4OUT&=~BIT6;
       else
@@ -747,15 +745,15 @@ u16 shift_fifo;
        P1OUT&=~BIT0;
 
        analog_on=1;
-       P2OUT|=BIT0+BIT1+BIT3;	//включаем ЦАП
+       P2OUT|=BIT0+BIT1+BIT3;   //включаем ЦАП
 
-       P5SEL |= 0x70; 		// MCLK, SMCLK,ACLK на вывод
+       P5SEL |= 0x70;           // MCLK, SMCLK,ACLK на вывод
 
 
        }
 
       else{
-       P5SEL&= ~0x70; 		// MCLK, SMCLK,ACLK выключаем на вывод
+       P5SEL&= ~0x70;           // MCLK, SMCLK,ACLK выключаем на вывод
 
        P2OUT&=~(BIT0+BIT1+BIT3);
 
@@ -819,17 +817,17 @@ u16 shift_fifo;
     //отправить подтверждение, если это не 0x01 тип пакета
     if (packets[shift_fifo-TYPEPACKET]!=0x01){
      shift_fifo=(x+1)*MAXPACKETLEN;
-   	//помещаем порядковый номер пакета для подтверждения
+        //помещаем порядковый номер пакета для подтверждения
      packets[shift_fifo-NUMPACKET]=packets[x*MAXPACKETLEN+queue[x].len-NUMPACKET];
-     packets[shift_fifo-LENPACKET]=NUMPACKET;	//длина подтверждающего пакета
-   	//указываем тип пакета
-     packets[shift_fifo-TYPEPACKET]=0x01;		//подтверждающий пакет
-   	//подсчитываем и помещаем CRC пакета
+     packets[shift_fifo-LENPACKET]=NUMPACKET;   //длина подтверждающего пакета
+        //указываем тип пакета
+     packets[shift_fifo-TYPEPACKET]=0x01;               //подтверждающий пакет
+        //подсчитываем и помещаем CRC пакета
      crc=crc16(&packets[shift_fifo-NUMPACKET],NUMPACKET-2);
      packets[shift_fifo-CRCPACKET]=crc>>8;
      packets[shift_fifo-CRCPACKET+1]=crc;
   
-   	//в справочном массиве указываем длину пакета
+        //в справочном массиве указываем длину пакета
      queue[x].len=NUMPACKET;
      #ifdef DEBUG_SERIAL
      packet_in_fifo++;
@@ -882,7 +880,7 @@ int x;
 //  UMCTL1 = 0x00;                        // no modulation
 
   ME2 |= UTXE1 + URXE1;                 // Enable USART1 TXD/RXD
-  IE2 |= URXIE1;			// Enable USART1 RX+TX interrupt
+  IE2 |= URXIE1;                        // Enable USART1 RX+TX interrupt
 //+ UTXIE1;                
   for (x=0;x<MAXQUE;x++) queue[x].busy=FREEPLACE;
   last_sended_packet=MAXQUE;
@@ -911,7 +909,7 @@ int x;
   UMCTL0 = 0x00;                        // no modulation
 
   ME1 |= UTXE0 + URXE0;                 // Enable USART1 TXD/RXD
-  IE1 |= URXIE0;			// Enable USART1 RX+TX interrupt
+  IE1 |= URXIE0;                        // Enable USART1 RX+TX interrupt
 //+ UTXIE0;                
   for (x=0;x<MAXQUE;x++) queue[x].busy=FREEPLACE;
   last_sended_packet=MAXQUE;
