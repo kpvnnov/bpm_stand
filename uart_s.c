@@ -1,4 +1,4 @@
-// $Id: uart_s.c,v 1.17 2004-05-13 14:45:46 peter Exp $
+// $Id: uart_s.c,v 1.18 2004-06-07 12:32:14 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 
@@ -709,8 +709,10 @@ void work_with_serial_rec(void){
                     chanel=packets[shift_fifo-CHANNEL_TO_SET];
                     break;
                 case 0x0B:         //закрыть клапан
+                    close_valve();
                     break;
                 case 0x0C:         //открыть клапан
+                    open_valve();
                     break;
                 case 0x0D:         //спустить давление до требуемой величины
                     //     содержание пакета:
