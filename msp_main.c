@@ -24,6 +24,7 @@
 //#include <msp430x11x1.h>
 //#include  <msp430x13x.h>
 #include  <msp430x14x.h>
+#include "global.h"
 
 #define disable_int_no_interrupt() _DINT()
 #define enable_int_no_interrupt() _EINT()
@@ -301,6 +302,10 @@ int forcedly=0;
    redraw_display_second(forcedly);
 //   redraw_display_voltage(forcedly);
    break;
+//  case 3:
+//   redraw_display_second(forcedly);
+//   redraw_display_voltage(forcedly);
+//   break;
   }
 }
 
@@ -595,23 +600,14 @@ u8 write_asp_trn_fifo(u8 data_wr){
   return 0;
  disable_int_no_interrupt();
  asp_trn_fifo_buf[asp_trn_fifo_end++ & (SERIAL_FIFO_TRN_LEN-1)]=data_wr;
- temp_aspcr=portASPCR;
- if ((temp_aspcr&(1<<bit_TIM))==0){	//прерывани€ передачи запрещены?
-  temp_aspcr|=1<<bit_TIM;		//разрешаем передачу
-  portASPCR=temp_aspcr;
-  }
+
+ if ((IFG1 & UTXIFG0) != 0)        // USART0 TX buffer ready?
+  TXBUF0 = asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
  enable_int_no_interrupt();
  return 1;
 }
 
-static inline u8 write_asp_rcv_fifo(u8 data_wr){
- if ( ( (asp_rcv_fifo_end+1)&(SERIAL_FIFO_RCV_LEN-1))== (asp_rcv_fifo_start&(SERIAL_FIFO_RCV_LEN-1)) )
-  return 0;
- asp_rcv_fifo_buf[asp_rcv_fifo_end++ & (SERIAL_FIFO_RCV_LEN-1)]=data_wr;
- return 1;
-}
 u16 send_serial_massiv(u8* data,u16 len){
-u16 temp_aspcr;
 u16 counter;
 u16 counter1;
 u16 t_end;
@@ -640,18 +636,16 @@ u16 t_start;
   asp_trn_fifo_end+=counter1;
 //  asp_trn_fifo_end+=counter;
   disable_int_no_interrupt();
-  temp_aspcr=portASPCR;
   //если фифошка не пуста€ и прерывани€ запрещены, то разрешаем их
   if ( ((asp_trn_fifo_end&(SERIAL_FIFO_TRN_LEN-1))!=(asp_trn_fifo_start&(SERIAL_FIFO_TRN_LEN-1)))&&
-       (temp_aspcr&(1<<bit_TIM))==0){	//прерывани€ передачи запрещены?
-   temp_aspcr|=1<<bit_TIM;		//разрешаем передачу
-   portASPCR=temp_aspcr;
+        ((IFG1 & UTXIFG0) != 0)  ){	//прерывани€ передачи запрещены?
+   TXBUF0 = asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
    }
   enable_int_no_interrupt();
 // }while(len);
 return len;
 }
-u16 read_asp_rcv_fifo(){ 
+u16 read_asp_rcv_fifo(void){ 
  if (asp_rcv_fifo_start==asp_rcv_fifo_end) return 0;
  return (asp_rcv_fifo_buf[asp_rcv_fifo_start++ & (SERIAL_FIFO_RCV_LEN-1)]|0x0100);
 }
@@ -660,17 +654,19 @@ int end_adc_conversion;
 long time_to_change;
 void main(void)
 { 
+int i;
 	// останавливаем watchdog
  WDTCTL=WDTPW|WDTHOLD;  		// Stop WDT
 	// конфигурируем ноги ввода вывода
+// WDTCTL=WDTHOLD;  		// Stop WDT
  set_pin_directions();
  run_full_speed=0;
  current_speed=0;
  current_timer=0;
  switch_speed_timer=0;
  end_adc_conversion=1;
- change_to_mode=0;
- mode_display=0;
+ change_to_mode=2;
+ mode_display=2;
  time_to_change=0;
  invert=0;
 	//переходим на работу от часового кварца
@@ -682,6 +678,12 @@ void main(void)
  init_adc();
 
   _EINT();                              // Enable interrupts
+  for (i = 0xFFF; i > 0; i--);           // Time for flag to set
+
+    if (current_speed==0 && run_full_speed && run_xt2()){
+     switch_xt2();
+     }
+  for (i = 0xFF; i > 0; i--);           // Time for flag to set
   
   while(1)
   {
@@ -689,7 +691,8 @@ void main(void)
     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
     P1OUT |= 0x01;                      // Set P1.0 LED on
     tick_timer();
-    if (current_speed==0 && run_full_speed && run_xt2()){
+//    P1OUT |= 0x01;                      // Set P1.0 LED on
+    if (current_speed==0 && run_full_speed ) { //&& run_xt2()){
      switch_xt2();
      }
     if (current_speed && end_adc_conversion){
@@ -717,15 +720,16 @@ interrupt[TIMERA0_VECTOR] void timer_a_0 (void)
  if (current_timer){
 //  BCSCTL2=(BCSCTL2&(~(SELM0)))|SELM1;
   	//счет таймера от SMCLK
-  if (refresh_timer>139){
+  if (refresh_timer>(139/2)){
    show_display();
-   refresh_timer-=140;
+   refresh_timer-=140/2;
    }
   refresh_timer++;
   sub_counter_timer++;  // 1400 √ц (делитель 5266)
-  if (sub_counter_timer>1399){
+  if (sub_counter_timer>(1399)){
    GlobalTime++;
    sub_counter_timer-=1400;
+
    }
   
   }
@@ -735,7 +739,7 @@ interrupt[TIMERA0_VECTOR] void timer_a_0 (void)
    current_timer=1;
    TACTL&=~(MC0|MC1); //stop
    TACTL=ID_0|TASSEL_2;
-   CCR0=5266;	 //1400,07595898 √ц 0x1492
+   CCR0=5266;	 //1400,07595898 √ц 0x1492(5266)
    TACTL|=MC_1;
    }
   counter_timer++;
@@ -763,17 +767,53 @@ interrupt[WDT_VECTOR] void wd_int (void)
 
 interrupt[ADC_VECTOR] void ADC12ISR (void)
 {
+//    P1OUT |= 0x01;                      // Set P1.0 LED on
   results[0] = ADC12MEM0;               // Move results, IFG is cleared
   results[1] = ADC12MEM1;               // Move results, IFG is cleared
   results[2] = ADC12MEM2;               // Move results, IFG is cleared    
   results[3] = ADC12MEM3;               // Move results, IFG is cleared  
-  end_adc_conversion=1;
+//    P1OUT &= ~0x01;                     // Reset P1.0 LED off
   _BIC_SR_IRQ(CPUOFF);               // Clear LPM0, SET BREAKPOINT HERE
+  end_adc_conversion=1;
+//  end_adc_conversion=1;
 }
 interrupt[UART0RX_VECTOR] void usart0_rx (void)
 {
-write_asp_rcv_fifo(RXBUF0);
 
 //  while ((IFG1 & UTXIFG0) == 0);        // USART0 TX buffer ready?
 //  TXBUF0 = ;                      // RXBUF0 to TXBUF0
+
+
+//так как нет inline, то раскрываем  write_asp_rcv_fifo(RXBUF0);
+//u8 write_asp_rcv_fifo(u8 data_wr){
+// if ( ( (asp_rcv_fifo_end+1)&(SERIAL_FIFO_RCV_LEN-1))== (asp_rcv_fifo_start&(SERIAL_FIFO_RCV_LEN-1)) )
+//  return 0;
+// asp_rcv_fifo_buf[asp_rcv_fifo_end++ & (SERIAL_FIFO_RCV_LEN-1)]=data_wr;
+// return 1;
+//}
+ if ( ( (asp_rcv_fifo_end+1)&(SERIAL_FIFO_RCV_LEN-1))!= (asp_rcv_fifo_start&(SERIAL_FIFO_RCV_LEN-1)) )
+  asp_rcv_fifo_buf[asp_rcv_fifo_end++ & (SERIAL_FIFO_RCV_LEN-1)]=RXBUF0;
+
+// if (temp_iosr_serial&( (1<<bit_OE)| //Overrun occurs - переполнение приема
+//                 (1<<bit_FE)| //framing error
+//                 (1<<bit_BI)   //break
+//               )
+//    ) { 
+//  portADTR;
+//  portADTR;	//два раза читаем порт, чтобы освободитьс€ от данных
+//  rDIOSR&=0x00FF;
+//  rDIOSR|=0x2600;	//сброс флагов BI(break interrupt)
+//                        //FE(framing error)
+//                        //переполнени€(OE-overrun error) в IOSR
+//  portIOSR=rDIOSR;
+
+}
+
+interrupt[UART0TX_VECTOR] void usart0_tx (void)
+{
+ if (asp_trn_fifo_start!=asp_trn_fifo_end)
+  TXBUF0 =asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
+}
+interrupt[NMI_VECTOR] void nmi(void)
+{
 }
