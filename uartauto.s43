@@ -31,21 +31,11 @@ TXD          set    002h                    ; TXD on P1.1
 ;   Texas Instruments, Inc
 ;   March 2002
 ;******************************************************************************
-;----------------------------------------------------------------------------- 
-            ORG     0F000h                  ; Program Start
-;----------------------------------------------------------------------------- 
-RESET       mov.w   #300h,SP                ; Initialize Stackpointer
-            call    #Init_Sys               ; Initialize System Peripherals
                                             ;
 Mainloop    call    #RX_Ready               ; UART ready to RX one Byte
-            bis.w   #LPM0,SR                ; Enter LPM0 Until Byte RXed
-            call    #TX_Byte                ; TX Back RXed Byte Received
-            jmp     Mainloop                ;
-                                            ;
 ;----------------------------------------------------------------------------- 
 Init_Sys;   Initialize System Peripherals  
 ;----------------------------------------------------------------------------- 
-StopWDT     mov.w   #WDTPW+WDTHOLD,&WDTCTL  ; Stop WDT
 SetupC0     mov.w   #OUT,&CCTL0             ; TXD Idle as Mark 
 SetupTA     mov.w   #TASSEL0+MC1,&TACTL     ; ACLK, continous mode
 SetupP1_2   bis.b   #TXD,&P1SEL             ; P1.1/TA0 for TXD function
