@@ -1,4 +1,4 @@
-//$Id: global.h,v 1.27 2004-03-18 16:51:14 peter Exp $
+//$Id: global.h,v 1.28 2004-05-13 14:45:46 peter Exp $
 
 
 #define DEBUG_SERIAL
@@ -70,7 +70,7 @@ u8 write_asp_trn_fifo(u8 data_wr);
 void init_uart(void);
 void update_diplay(void);
 void work_with_serial_rec(void);
-void set_adc(int ch);
+void set_adc(int ch, char b);
 void set_adc_temperature(void);
 
 

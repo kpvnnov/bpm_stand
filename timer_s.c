@@ -1,4 +1,4 @@
-// $Id: timer_s.c,v 1.13 2004-05-12 14:47:15 peter Exp $
+// $Id: timer_s.c,v 1.14 2004-05-13 14:45:46 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 
@@ -297,11 +297,11 @@ interrupt [TIMERA1_VECTOR] void Timer_A(void)
     u16*t_stat;
     HOLD_TIME_IRQ()
  #ifdef CABLE
-    temp_led=P1OUT;
+    //temp_led=P1OUT;
  #endif
 
  #ifdef CABLE
-    P1OUT |= 0x01;                      // Set P1.0 LED on
+    //P1OUT |= 0x01;                      // Set P1.0 LED on
  #endif
     switch( TAIV )
     {
@@ -391,18 +391,23 @@ interrupt [TIMERA1_VECTOR] void Timer_A(void)
                 end_adc_conversion=0;
                 //       jitter_pusk=TAR;
                 //       ADC12CTL0 |= ADC12SC;                 // Start conversion
+                if (chanel_convert&0x40){ //"серийное" преобразование каналов
+                    set_adc((first_channel&0xC0)+((first_channel+rotate_channel)&0x3F),0);
+                    ADC12CTL0 |= ADC12SC;                 // Start conversion
+                }
+
                 if (chanel!=chanel_convert){
                     chanel_convert=chanel;
                     first_channel=chanel_convert;
                     rotate_channel=0;
-                    set_adc(chanel_convert);
+                    set_adc(chanel_convert,1);
                     ADC12CTL0 |= ADC12SC;                 // Start conversion
                 }
                 else
                     if ( ((chanel_convert&0x40)==0) &&
                             (dac[chanel_convert&((NUM_CHANEL>>1)-1)]&0x8000) ){
                         dac[chanel_convert&((NUM_CHANEL>>1)-1)]&=0x7FFF;
-                        set_adc(chanel_convert);
+                        set_adc(chanel_convert,1);
                         ADC12CTL0 |= ADC12SC;                 // Start conversion
                     }
                 switch(what_doing){

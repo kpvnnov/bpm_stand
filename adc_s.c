@@ -1,8 +1,8 @@
 
-// $Id: adc_s.c,v 1.12 2004-05-12 14:47:14 peter Exp $
+// $Id: adc_s.c,v 1.13 2004-05-13 14:45:45 peter Exp $
 #include  <msp430x14x.h>
 
-//вЁЇл ЇҐаҐ¬Ґ­­ле
+//типы переменных
 #include "type_def.h"
 
 #ifdef STEND
@@ -10,6 +10,10 @@
 #endif // STEND
 
 #include "global.h"
+
+// "inline" функции для 149 процессора
+#include "m149.h"
+
 
 extern u16 temp_hold;
 extern u16 timer_sum_sleep;
@@ -76,10 +80,27 @@ interrupt[ADC_VECTOR] void ADC12ISR (void)
     //int p=( & (ADC_FIFO_RCV_LEN-1))<<3;
     int sh;
     unsigned int sum,sum1;
-    HOLD_TIME_IRQ()
-    end_adc_conversion=1;
-    jitter_adc=CCR1-TAR;
-    if (jitter_adc_max<jitter_adc) jitter_adc_max=jitter_adc;
+    u16 savecctl1,savecctl2,savectl,saveie1,saveadcie;
+    //приходится сокращать    HOLD_TIME_IRQ()
+    //приходится сокращать    jitter_adc=CCR1-TAR;
+    //приходится сокращать    if (jitter_adc_max<jitter_adc) jitter_adc_max=jitter_adc;
+
+    savectl=TACTL;
+    savecctl1=TACCTL1;
+    savecctl2=TACCTL2;
+    saveadcie=ADC12IE;
+    TACTL&=   ~(TAIE);
+    TACCTL1&= ~(CCIE);         //запрещаем прерывания таймера
+    TACCTL2&= ~(CCIE);         //запрещаем прерывания таймера
+    ADC12IE=0;                 //запрещаем прерывание АЦП
+  #ifdef STEND
+    saveie1=IE1;
+    IE1 &= ~UTXIE0;                          // то запрещаем прерыв. передачи
+  #endif //STEND
+
+
+    enable_int_no_interrupt();  //разрешаем глобальные прерывания
+
 
     //    jitter_adc_max++;
 
@@ -112,7 +133,7 @@ interrupt[ADC_VECTOR] void ADC12ISR (void)
             adc_rcv_fifo_end++;
         ADC12CTL0 |= ADC12SC;                 // Start conversion
         _BIC_SR_IRQ(CPUOFF);               // Clear LPM0, SET BREAKPOINT HERE
-        SUM_TIME_IRQ();
+        //приходится сокращать        SUM_TIME_IRQ();
     }
     else
         if (chanel_convert&0x40){
@@ -143,42 +164,40 @@ interrupt[ADC_VECTOR] void ADC12ISR (void)
                 multi_count0[rotate_channel][sh]=sum;
                 multi_count1[rotate_channel][sh]=sum1;
             }
-            else rotate_channel=0; ///®иЁЃЋ—ЌЂџ ‘€’“Ђ–€џ
+            else rotate_channel=0; ///ошиБОЧНАЯ СИТУАЦИЯ
 
             rotate_channel++;
 
 
-            //  if (rotate_channel==(NUM_MULTICHANNEL)){ //¤«п б«Ґ¤гойҐЈ® жЁЄ«  гбв ­ ў«Ёў Ґ¬ вҐ¬ЇҐа вгаг
-            //   set_adc_temperature(); //вҐ¬ЇҐа вга  Ўг¤Ґв бг¬¬®© sum Ё sum1
+            //  if (rotate_channel==(NUM_MULTICHANNEL)){ //для следующего цикла устанавливаем температуру
+            //   set_adc_temperature(); //температура будет суммой sum и sum1
             //   SUM_TIME_IRQ_NOSLEEP();
             //   }
             //  else
-            if (rotate_channel==(NUM_MULTICHANNEL)){ //¤«п б«Ґ¤гойҐЈ® жЁЄ«  гбв ­ ў«Ёў Ґ¬ жЁЄ« б ­ з « 
-                // Ё ўлбв ў«пҐ¬ ¤ ­­лҐ ¤«п § ­ҐбҐ­Ёп ў ®зҐаҐ¤м ЇҐаҐ¤ зЁ
+            if (rotate_channel==(NUM_MULTICHANNEL)){ //для следующего цикла устанавливаем цикл с начала
+                // и выставляем данные для занесения в очередь передачи
                 results[sh]=0x8000|(first_channel&0x1F);
                 if (stop_transmit==0)
                     adc_rcv_fifo_end++;
                 rotate_channel=0;
-                set_adc((first_channel&0xC0)+((first_channel+rotate_channel)&0x3F));
-                ADC12CTL0 |= ADC12SC;                 // Start conversion
+                //здесь была установка АЦП - перенесено в таймерное прерывание
                 _BIC_SR_IRQ(CPUOFF);               // Clear LPM0, SET BREAKPOINT HERE
-                SUM_TIME_IRQ();
+                //приходится сокращать                SUM_TIME_IRQ();
             }
-            else { //®Ўлз­л© жЁЄ« ¤«п б«Ґ¤гойҐЈ® Є ­ « 
-                set_adc((first_channel&0xC0)+((first_channel+rotate_channel)&0x3F));
-                ADC12CTL0 |= ADC12SC;                 // Start conversion
-                //ўле®¤Ё¬ Ё§ бЇпзЄЁ ў "¤ў  а §  з йҐ"
+            else { //обычный цикл для следующего канала
+                //выходим из спячки в "два раза чаще"
+                //здесь была установка АЦП - перенесено в таймерное прерывание
                 if (rotate_channel==(NUM_MULTICHANNEL/2)){
                     _BIC_SR_IRQ(CPUOFF);               // Clear LPM0, SET BREAKPOINT HERE
-                    SUM_TIME_IRQ();
+                    //приходится сокращать                    SUM_TIME_IRQ();
                 }
                 else{
-                    SUM_TIME_IRQ_NOSLEEP();
+                    //приходится сокращать                    SUM_TIME_IRQ_NOSLEEP();
                 }
             }
 
         }
-        else{ //"®ЎлЄ­®ўҐ­­л©" Ї а­л© аҐ¦Ё¬
+        else{ //"обыкновенный" парный режим
             sh=(adc_rcv_fifo_end & (ADC_FIFO_RCV_LEN-1))*SIZE_OF_ADC_DUMP;
 
             one_count0[sh]   = ADC12MEM0;
@@ -204,12 +223,30 @@ interrupt[ADC_VECTOR] void ADC12ISR (void)
                 adc_rcv_fifo_end++;
 
             ADC12CTL0 |= ADC12SC;                 // Start conversion
-            _BIC_SR_IRQ(CPUOFF);               // Clear LPM0, SET BREAKPOINT HERE
-            SUM_TIME_IRQ();
+            _BIC_SR_IRQ(CPUOFF);               // Clear LPM0
+            //приходится сокращать            SUM_TIME_IRQ();
         }
+    disable_int_no_interrupt();  //запрещаем глобальные прерывания
+
+    if (savectl&TAIE)
+        TACTL|=TAIE;
+    if (CCIE&savecctl1)
+        TACCTL1|=CCIE;             //восстанавливаем регистр таймера
+    if (CCIE&savecctl2)
+        TACCTL2|=CCIE;             //восстанавливаем регистр таймера
+  #ifdef STEND
+    if (saveie1&UTXIE0)
+        IE1 |= UTXIE0;                          //  прерыв. передачи
+  #endif //STEND
+    ADC12IE=saveadcie;
+
+    end_adc_conversion=1;
+
+
+
 }
 
-//¤«п вҐ¬ЇҐа вга­®Ј® бҐ­б®а  sample period Ў®«ҐҐ 30 mkS
+//для температурного сенсора sample period более 30 mkS
 void init_adc(void){
 
     //ADC12ON - ADC12 On
@@ -342,7 +379,7 @@ void set_adc_temperature(void){
     ADC12CTL0 |= ENC;                     // Enable conversions
 }
 
-void set_adc(int ch){
+void set_adc(int ch,char b){
 
     ADC12CTL0 &= ~ENC;                     // Enable conversions
     ADC12CTL0 = ADC12ON+REFON+MSC+SHT0_6+SHT1_6;    // Turn on ADC12, set sampling time
@@ -399,26 +436,27 @@ void set_adc(int ch){
         ADC12MCTL15= INCH_3+SREF_2+EOS;
         break;
     }//бўЁвз
-    if (ch&0x80){ //аҐ§Ґаў­л© Є ­ «
-        ADC12MCTL0 = INCH_1+SREF_2;           // ref+=Ve REF,  channel = A1
-        ADC12MCTL2 = INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
-        ADC12MCTL4 = INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
-        ADC12MCTL6 = INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
-        ADC12MCTL8 = INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
-        ADC12MCTL10= INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
-        ADC12MCTL12= INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
-        ADC12MCTL14= INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
-    }
-    else{// ®б­®ў­®© Є ­ «
-        ADC12MCTL0 = INCH_7+SREF_2;           // ref+=Ve REF,  channel = A7
-        ADC12MCTL2 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
-        ADC12MCTL4 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
-        ADC12MCTL6 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
-        ADC12MCTL8 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
-        ADC12MCTL10= INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
-        ADC12MCTL12= INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
-        ADC12MCTL14= INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
-    }
+    if (b)
+        if (ch&0x80){ //аҐ§Ґаў­л© Є ­ «
+            ADC12MCTL0 = INCH_1+SREF_2;           // ref+=Ve REF,  channel = A1
+            ADC12MCTL2 = INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
+            ADC12MCTL4 = INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
+            ADC12MCTL6 = INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
+            ADC12MCTL8 = INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
+            ADC12MCTL10= INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
+            ADC12MCTL12= INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
+            ADC12MCTL14= INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
+        }
+        else{// ®б­®ў­®© Є ­ «
+            ADC12MCTL0 = INCH_7+SREF_2;           // ref+=Ve REF,  channel = A7
+            ADC12MCTL2 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
+            ADC12MCTL4 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
+            ADC12MCTL6 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
+            ADC12MCTL8 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
+            ADC12MCTL10= INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
+            ADC12MCTL12= INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
+            ADC12MCTL14= INCH_7+SREF_2;           // ref+=Ve REF+, channel = A7
+        }
     ADC12IE = 1<<15;                       // Enable ADC12IFG.3
     // ADC12IE = 1<<7;                       // Enable ADC12IFG.3
     ADC12CTL0 |= ENC;                     // Enable conversions

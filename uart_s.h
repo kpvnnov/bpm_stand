@@ -1,6 +1,6 @@
 
  //количество пакетов
-#define  MAXQUE 8               
+#define  MAXQUE 6
  //максимальная длина одного пакета - ДОЛЖНА БЫТЬ четной!
 #define  MAXPACKETLEN   76      
 

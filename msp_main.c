@@ -1,5 +1,5 @@
 //********************************************************
-// $Id: msp_main.c,v 1.29 2004-05-12 14:47:14 peter Exp $
+// $Id: msp_main.c,v 1.30 2004-05-13 14:45:46 peter Exp $
 //********************************************************
 
 //#include <msp430x11x1.h>
@@ -286,7 +286,7 @@ int run_xt2(void){
     while ((IFG1 & OFIFG) != 0);          // OSCFault flag still set?
 
     if ((IFG1 & OFIFG)==0){
-        BCSCTL2 = (BCSCTL2&(~SELM0))|SELM1|DIVM0;   // MCLK = XT2 (safe)
+        BCSCTL2 = (BCSCTL2&(~SELM0))|SELM1;   // MCLK = XT2 (safe)  |DIVM0 деление пополам убрал
         current_speed=1;
     }
     return count;

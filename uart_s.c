@@ -1,4 +1,4 @@
-// $Id: uart_s.c,v 1.16 2004-05-12 14:47:15 peter Exp $
+// $Id: uart_s.c,v 1.17 2004-05-13 14:45:46 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 
@@ -807,7 +807,7 @@ void work_with_serial_rec(void){
                         disable_int_no_interrupt();
                         temperature=0;
                         if (stop_adc==0) { //если АЦП не остановлен
-                            set_adc(chanel_convert);
+                            set_adc(chanel_convert,1);
                             ADC12CTL0 |= ADC12SC;                 // Start conversion
                         }
                         enable_int_no_interrupt();
