@@ -1,5 +1,5 @@
 //********************************************************
-// $Id: msp_main.c,v 1.19 2003-05-28 20:14:00 peter Exp $
+// $Id: msp_main.c,v 1.20 2003-06-02 17:15:58 peter Exp $
 //********************************************************
 
 //#include <msp430x11x1.h>
@@ -65,8 +65,8 @@ extern time_in time_to_show;
 
 
 #ifdef DEBUG_SERIAL
-extern s16 packet_in_fifo;
-extern s16 fifo_trn_depth;
+extern u16 packet_in_fifo;
+extern u16 fifo_trn_depth;
 
 #endif //DEBUG_SERIAL
 
@@ -74,10 +74,10 @@ extern s16 fifo_trn_depth;
 
 
 
-#define ACLK_GO	2500	//количество достаточных попыток запуска
+#define ACLK_GO	250	//количество достаточных попыток запуска
 //возвращаем не ноль, если часовой кварц работает
 int test_run_LFXT1CLK(void){
-int c=5000;	//общее количество попыток запуска ACLK
+int c=500;	//общее количество попыток запуска ACLK
 int t=0;	//счетчик попыток "удачного бега"
 int last_att=9;
 int i;
@@ -118,9 +118,9 @@ unsigned int to_compare,to_compare1;
   if (to_compare>2) t++; else t=0;
 	//сброс WatchDog
   if (t>ACLK_GO) break;	//считаем, что часовой кварц запустилс€
-  WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
-  if ((t>>8)!=last_att){
-    last_att=t>>8;
+  CLEAR_DOG();	
+  if ((t>>5)!=last_att){
+    last_att=t>>5;
     symbl[3]=0x0A;	//'A'
     symbl[2]=0x0C;	//'C'
     symbl[1]=0x15;	//'L'
@@ -287,7 +287,8 @@ int i;
  WDTCTL=WDTPW|WDTHOLD;  		// Stop WDT
 
 	//сброс WatchDog
- WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
+ CLEAR_DOG();	
+ 
 
 	// конфигурируем ноги ввода вывода
  set_pin_directions();
@@ -316,12 +317,12 @@ int i;
     update_diplay();
     while(1){
 	//сброс WatchDog
-     WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
+        CLEAR_DOG();	
 	//и начинаем этой ногой "мигать"
      for (i = 1000; i>0; i--);           // Delay
      P3OUT^=BIT6;
 	//сброс WatchDog
-     WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
+     CLEAR_DOG();	
      for (i = 40; i>0; i--);           // Delay
      P3OUT^=BIT6;
      show_display();
@@ -342,11 +343,11 @@ int i;
     update_diplay();
     while(1){
 	//сброс WatchDog
-     WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
+     CLEAR_DOG();	
 	//и начинаем этой ногой "мигать"
      for (i = 1000; i>0; i--);           // Delay
 	//сброс WatchDog
-     WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
+     CLEAR_DOG();	
      P3OUT^=BIT6;
      for (i = 1000; i>0; i--);           // Delay
      P3OUT^=BIT6;
@@ -361,7 +362,7 @@ int i;
 	/* 1000ms  " */
  WDTCTL = WDT_ARST_1000;
  	//сброс WatchDog
- WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
+ CLEAR_DOG();	
 
  _BIS_SR(SCG0);
 	//переходим на работу от второго кварца
@@ -378,7 +379,7 @@ int i;
     update_diplay();
     while(1){
 	//сброс WatchDog
-     WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
+     CLEAR_DOG();	
 	//и начинаем этой ногой "мигать"
      for (i = 1000; i>0; i--);           // Delay
      P3OUT^=BIT6;
@@ -395,82 +396,82 @@ int i;
   
   while(1)
   {
-//    BCSCTL2|=SELM0|SELM1;
-//    _BIS_SR(CPUOFF);                 // входим в режим сп€чки
-    P1OUT &= ~0x01;                     // Reset P1.0 LED off
-    SUM_TIME(0);//DISPLAY_JOB
+    #ifdef CABLE
+     P1OUT &= ~0x01;                     // Reset P1.0 LED off
+    #endif
+    SUM_TIME(DISPLAY_JOB,1);
     _BIS_SR(CPUOFF+GIE);
+//    SUM_TIME(DISPLAY_JOB,0);
+//    _BIS_SR(GIE);
 
-/*    why_job=DISPLAY_JOB;
-    P1OUT |= 0x01;                      // Set P1.0 LED on
+    #ifdef CABLE
+     P1OUT |= 0x01;                      // Set P1.0 LED on
+    #endif
     //-----------------
     // работа с "дисплеем"
     //-----------------
     if (update_display){
      update_display=0;
-//     tick_timer();
-//     work_with_display();
-     P1OUT &= ~0x01;                     // Reset P1.0 LED off
-//     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
-     SUM_TIME();
-     _BIS_SR(CPUOFF+GIE);
-     why_job=SERIAL_JOB;
-     P1OUT |= 0x01;                      // Set P1.0 LED on
+     tick_timer();
+     work_with_display();
      }
-    else{
-     P1OUT &= ~0x01;                     // Reset P1.0 LED off
-     SUM_TIME();
-     _BIS_SR(CPUOFF+GIE);
-     why_job=SERIAL_JOB;
-     P1OUT |= 0x01;                      // Set P1.0 LED on
-     }
-*/
 
-//     P1OUT &= ~0x01;                     // Reset P1.0 LED off
-     SUM_TIME(ADC_JOB);
-     _BIS_SR(CPUOFF+GIE);
-     P1OUT |= 0x01;                      // Set P1.0 LED on
+     SUM_TIME(ADC_JOB,0);
+     _BIS_SR(GIE);
 
 
     //-----------------
     // работа с данными из ј÷ѕ
     //-----------------
+    #ifdef CABLE
+     P1OUT |= 0x01;                      // Set P1.0 LED on
+    #endif //
     while(adc_rcv_fifo_start!=adc_rcv_fifo_end){
      if (work_with_adc_put()==0) break;
      }
-    P1OUT &= ~0x01;                     // Reset P1.0 LED off
-    SUM_TIME(STAT_JOB);
+    #ifdef CABLE
+     P1OUT &= ~0x01;                     // Reset P1.0 LED off
+    #endif
+    SUM_TIME(STAT_JOB,0);
     _BIS_SR(GIE);
     //-----------------
-    SUM_TIME(0);
-    _BIS_SR(CPUOFF+GIE);
 
 
     //-----------------
     // работа с данными статистики
     //-----------------
+    #ifdef CABLE
+     P1OUT |= 0x01;                      // Set P1.0 LED on
+    #endif
     while (stat_rcv_fifo_start!=stat_rcv_fifo_end){
      if (put_packet_type5()==0) break;
      }
     while (stat1_rcv_fifo_start!=stat1_rcv_fifo_end){
-     if (put_packet_type5()==0) break;
+     if (put_packet_type6()==0) break;
      }
-    P1OUT &= ~0x01;                     // Reset P1.0 LED off
-    SUM_TIME(SERIAL_JOB);
-    _BIS_SR(CPUOFF+GIE);
+    #ifdef CABLE
+     P1OUT &= ~0x01;                     // Reset P1.0 LED off
+    #endif
+    SUM_TIME(SERIAL_JOB,0);
+    _BIS_SR(GIE);
     //-----------------
 
 
     //-----------------
     // работа с последовательным портом
     //-----------------
+    #ifdef CABLE
+     P1OUT |= 0x01;                      // Set P1.0 LED on
+    #endif
     while(fifo_trn_depth<(SERIAL_FIFO_TRN_LEN/2)){
      if (packet_in_fifo==0) break;
       work_with_serial();
      }
-    P1OUT &= ~0x01;                     // Reset P1.0 LED off
-    SUM_TIME(0);
-    _BIS_SR(CPUOFF+GIE);
+    #ifdef CABLE
+     P1OUT &= ~0x01;                     // Reset P1.0 LED off
+    #endif
+//    SUM_TIME(0);
+//    _BIS_SR(CPUOFF+GIE);
     //-----------------
 
 

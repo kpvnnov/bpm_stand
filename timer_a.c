@@ -1,4 +1,4 @@
-// $Id: timer_a.c,v 1.13 2003-05-28 20:14:00 peter Exp $
+// $Id: timer_a.c,v 1.14 2003-06-02 17:15:58 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -31,6 +31,12 @@ extern u16 length_sended_2_fifo_min;
 #endif //DEBUG_SERIAL
 
 
+extern volatile unsigned int  asp_trn_fifo_start;      /* serial transmit buffer start index      */
+
+extern unsigned int  asp_trn_fifo_end;        /* serial transmit flash buffer end index        */
+
+
+
 unsigned int  stat_rcv_fifo_start;      /* stat receive buffer start index      */
 
 volatile unsigned int  stat_rcv_fifo_end;        /* stat receive  buffer end index        */
@@ -40,14 +46,14 @@ u16 stat_buf[STAT_FIFO_RCV_LEN*SIZE_STAT];
 unsigned int  stat1_rcv_fifo_start;      /* stat receive buffer start index      */
 
 volatile unsigned int  stat1_rcv_fifo_end;        /* stat receive  buffer end index        */
-u16 stat1_buf[STAT_FIFO_RCV_LEN*SIZE_STAT];
+u16 stat1_buf[STAT1_FIFO_RCV_LEN*SIZE_STAT1];
 
 
 //ADC
 extern int end_adc_conversion;
 extern int error_adc;
 extern unsigned int results0[ADC_FIFO_RCV_LEN];
-extern unsigned int results4[ADC_FIFO_RCV_LEN];
+extern unsigned int results8[ADC_FIFO_RCV_LEN];
 
 int gradus_to_show;
 int volt_to_show;
@@ -200,7 +206,9 @@ void init_timer_a(void){
  // 3 Both Edges Capture is done with both rising and falling edges.
 // CCTL0=CCIE;	// CCR0 interrupt enabled
 // CCR0=32768/4; 	//8192=0x2000
+
  CCTL2|= CCIE;              // interrupt enabled
+
  CCR2=TAR+0x100;
 	// Start Timer_a in Continous upmode
  TACTL|=MC_2    /* Timer A mode control: 2 - Continous up */;	
@@ -210,9 +218,13 @@ void init_timer_a(void){
 
 interrupt[TIMERA0_VECTOR] void timer_a_0 (void)
 {
- P1OUT |= 0x01;                      // Set P1.0 LED on
+ #ifdef CABLE
+  P1OUT |= 0x01;                      // Set P1.0 LED on
+ #endif
  _BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
- P1OUT &= ~0x01;                     // Reset P1.0 LED off
+ #ifdef CABLE
+  P1OUT &= ~0x01;                     // Reset P1.0 LED off
+ #endif
 }
 // Timer_A3 Interrupt Vector (TAIV) handler
 interrupt [TIMERA1_VECTOR] void Timer_A(void)
@@ -221,8 +233,13 @@ int temp_led;
 int temp_diff;
 u16*t_stat;
 HOLD_TIME_IRQ()
- temp_led=P1OUT;
- P1OUT |= 0x01;                      // Set P1.0 LED on
+ #ifdef CABLE
+  temp_led=P1OUT;
+ #endif
+
+ #ifdef CABLE
+  P1OUT |= 0x01;                      // Set P1.0 LED on
+ #endif
  switch( TAIV )
  {
    case  2: //тактирование запуска АЦП
@@ -238,16 +255,30 @@ HOLD_TIME_IRQ()
       //пока ничего не делаем
       break;
      case 1: //(счет таймера от SMCLK)
-      CCR1 += (18432*3);
+      CCR1 += (18432*2);
 //      ADC12CTL0 |= ADC12SC;                 // Start conversion
       if (end_adc_conversion){
        end_adc_conversion=0;
        ADC12CTL0 |= ADC12SC;                 // Start conversion
        }
-      else {error_adc=1;}
+      else {
+//       error_adc=1;
+        #ifdef CABLE
+         IE2 &= ~UTXIE1;		
+        #endif //CABLE
+        #ifdef STEND
+         IE1 &= ~UTXIE0;		
+        #endif //STEND
+       }
       break;
      }
-    _BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
+    #ifdef CABLE
+     P1OUT = temp_led;                     // return led state
+    #endif
+    _BIC_SR_IRQ(CPUOFF);               // Clear LPM0, SET BREAKPOINT HERE
+    SUM_TIME_IRQ();
+
+//    SUM_TIME_IRQ_NOSLEEP();
     break;
    case  4://тактирование часов
      //в режиме SMCLK
@@ -268,7 +299,7 @@ HOLD_TIME_IRQ()
       break;
      }
 	//сброс WatchDog
-    WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
+    CLEAR_DOG();	
     show_display();
     update_display=1;
     sub_counter_timer++;  
@@ -277,7 +308,6 @@ HOLD_TIME_IRQ()
      sub_counter_timer-=16;
      second_point^=0xFFFF;
       }
-    _BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
     t_stat=&stat_buf[(stat_rcv_fifo_end & (STAT_FIFO_RCV_LEN-1))*SIZE_STAT];
     *t_stat++=timer_sum;
     timer_sum=0;
@@ -298,7 +328,12 @@ HOLD_TIME_IRQ()
     *t_stat++=timer_diff_max;
     timer_diff_max=0;
 
-    stat_rcv_fifo_end++;
+//    stat_rcv_fifo_end++;
+    _BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
+    #ifdef CABLE
+     P1OUT = temp_led;                     // return led state
+    #endif
+    SUM_TIME_IRQ();
 
     break; //тактирование часов
 
@@ -312,7 +347,7 @@ HOLD_TIME_IRQ()
      TACCTL1 = OUTMOD_4+CCIE;                   // CCR1 setup
      TACCR1=TAR+0x100;
 //     ADC12CTL0 |= ENC;                     // Enable conversions
-     ADC12CTL0 |= ADC12SC;                 // Start conversion
+//     ADC12CTL0 |= ADC12SC;                 // Start conversion
      TACTL|=MC_2;	//запускаем Timer A mode control: 2 - Continous up
      }
     t_stat=&stat1_buf[(stat1_rcv_fifo_end & (STAT1_FIFO_RCV_LEN-1))*SIZE_STAT1];
@@ -322,13 +357,13 @@ HOLD_TIME_IRQ()
     fifo_trn_depth_max=0;
 
     *t_stat++=packet_fifo_full;
-    packet_fifo_full=0;
+//    packet_fifo_full=0;
 
     *t_stat++=error_uart_depth;
-    error_uart_depth=0;
+//    error_uart_depth=0;
 
     *t_stat++=error_send_serial;
-    error_send_serial=0;
+//    error_send_serial=0;
 
     *t_stat++=length_sended_2_fifo_max;
     length_sended_2_fifo_max=0;
@@ -336,15 +371,16 @@ HOLD_TIME_IRQ()
     *t_stat++=length_sended_2_fifo_min;
     length_sended_2_fifo_min=0xFFF;
 
-    stat1_rcv_fifo_end++;
+//    stat1_rcv_fifo_end++;
 
+    #ifdef CABLE
+     P1OUT = temp_led;                     // return led state
+    #endif
+    SUM_TIME_IRQ_NOSLEEP();
 
    break;      
             
  }
-// P1OUT &= ~0x01;                     // Reset P1.0 LED off
- P1OUT = temp_led;                     // return led state
-SUM_TIME_IRQ();
 }
 
 interrupt[WDT_VECTOR] void wd_int (void)
@@ -644,8 +680,8 @@ void redraw_display_voltage(int force){
    }
 }
 void redraw_display_celciy(int force){
-  if (force || (results4[0]!=gradus_to_show)){
-   gradus_to_show=results4[0];
+  if (force || (results8[0]!=gradus_to_show)){
+   gradus_to_show=results8[0];
    make_view_time_celciy(gradus_to_show);
    }
 }

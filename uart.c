@@ -1,4 +1,4 @@
-// $Id: uart.c,v 1.16 2003-05-28 20:14:00 peter Exp $
+// $Id: uart.c,v 1.17 2003-06-02 17:15:58 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -19,7 +19,7 @@ extern u16 stat_buf[STAT_FIFO_RCV_LEN*SIZE_STAT];
 extern unsigned int  stat_rcv_fifo_start;      /* stat receive buffer start index      */
 extern volatile unsigned int  stat_rcv_fifo_end;        /* stat receive  buffer end index        */
 
-extern u16 stat1_buf[STAT_FIFO_RCV_LEN*SIZE_STAT];
+extern u16 stat1_buf[STAT1_FIFO_RCV_LEN*SIZE_STAT1];
 extern unsigned int  stat1_rcv_fifo_start;      /* stat receive buffer start index      */
 extern volatile unsigned int  stat1_rcv_fifo_end;        /* stat receive  buffer end index        */
 
@@ -46,6 +46,7 @@ extern unsigned int results4[ADC_FIFO_RCV_LEN];
 extern unsigned int results5[ADC_FIFO_RCV_LEN];
 extern unsigned int results6[ADC_FIFO_RCV_LEN];
 extern unsigned int results7[ADC_FIFO_RCV_LEN];
+extern unsigned int results8[ADC_FIFO_RCV_LEN];
 
 
 /*
@@ -84,8 +85,8 @@ _____
 #define  LENPACKET	3	//смещение (с конца) положения в пакете длины пакета
 #define  TYPEPACKET     4	//смещение (с конца) положения в пакете типа пакета
 #define  NUMPACKET	5	//смещение (с конца) положения в пакете номера пакета
-#define  DATA3PACKET    18	//смещение (с конца) положения в пакете размещения данных
-#define  SIZEDATA3	12	//количество байт данных в пакете типа 3
+#define  DATA3PACKET    24	//смещение (с конца) положения в пакете размещения данных
+//#define  SIZEDATA3	12	//количество байт данных в пакете типа 3
 #define  ESCAPE		0x7D
 #define  EOFPACKET	0x7E	//код признака конца кадра
 volatile unsigned int  asp_trn_fifo_start;      /* serial transmit buffer start index      */
@@ -202,6 +203,10 @@ u16* t_p;
  *t_p++=results2[info];
  *t_p++=results3[info];
  *t_p++=results4[info];
+ *t_p++=results5[info];
+ *t_p++=results6[info];
+ *t_p++=results7[info];
+ *t_p++=results8[info];
 
 
 	//помещаем в пакет его длину (без завершающего EOFPACKET)
@@ -409,6 +414,14 @@ int x;
   UBR11 = 0x01;                         //
   UMCTL1 = 0x00;                        // no modulation
 
+  UBR01 = 0x40;                         //7.372.800/115200 = 64 (0x40)
+  UBR11 = 0x00;                         //
+  UMCTL1 = 0x00;                        // no modulation
+
+//  UBR01 = 0xC0;                         //7.372.800/38400 = 192 (0xC0)
+//  UBR11 = 0x00;                         //
+//  UMCTL1 = 0x00;                        // no modulation
+
   ME2 |= UTXE1 + URXE1;                 // Enable USART1 TXD/RXD
   IE2 |= URXIE1;			// Enable USART1 RX+TX interrupt
 //+ UTXIE1;                
@@ -429,8 +442,12 @@ int x;
 //  UBR10 = 0x00;                         //
 //  UMCTL0 = 0x2C;                        // modulation
 
-  UBR00 = 0x80;                         //7.372.800/19200 = 384 (0x180)
-  UBR10 = 0x01;                         //
+//  UBR00 = 0x80;                         //7.372.800/19200 = 384 (0x180)
+//  UBR10 = 0x01;                         //
+//  UMCTL0 = 0x00;                        // no modulation
+
+  UBR00 = 0x40;                         //7.372.800/115200 = 64 (0x40)
+  UBR10 = 0x00;                         //
   UMCTL0 = 0x00;                        // no modulation
 
   ME1 |= UTXE0 + URXE0;                 // Enable USART1 TXD/RXD
@@ -464,7 +481,9 @@ interrupt[UART1TX_VECTOR] void usart1_tx (void)
 
 int temp_led;
 HOLD_TIME_IRQ()
- temp_led=P1OUT;
+ #ifdef CABLE
+  temp_led=P1OUT;
+ #endif
 
 #ifdef CABLE
  TXBUF1 = asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
@@ -480,23 +499,24 @@ HOLD_TIME_IRQ()
   fifo_trn_depth--;
  #endif
  if (asp_trn_fifo_start==asp_trn_fifo_end){ // если данных больше нет
-#ifdef CABLE
-  IE2 &= ~UTXIE1;                          // то запрещаем прерыв. передачи
-#endif //CABLE
+  #ifdef CABLE
+   IE2 &= ~UTXIE1;                          // то запрещаем прерыв. передачи
+  #endif //CABLE
 
-#ifdef STEND
-  IE1 &= ~UTXIE0;                          // то запрещаем прерыв. передачи
-#endif //STEND
+  #ifdef STEND
+   IE1 &= ~UTXIE0;                          // то запрещаем прерыв. передачи
+  #endif //STEND
 
   #ifdef DEBUG_SERIAL
   if (fifo_trn_depth) {error_uart_depth++;fifo_trn_depth=0;}
   #endif
   }
- P1OUT = temp_led;                     // return led state
-
+ #ifdef CABLE
+  P1OUT = temp_led;                     // return led state
+ #endif
 //для отладки
 //обязательно УБРАТЬ ЭТОТ АНТИСЛИП!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
-_BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
+//_BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
 //!!!!!!!!!!!!!!!!!!!!!!!
 
 SUM_TIME_IRQ_NOSLEEP();
@@ -573,29 +593,27 @@ u16 t_start;
    if (escape_sym){
     escape_sym=0;
     asp_trn_fifo_buf[t_end++]=(*data++)^0x40;
-    #ifdef DEBUG_SERIAL
-     fifo_trn_depth++;
-    #endif
     }
    else
     if (*data==EOFPACKET||*data==ESCAPE){
      escape_sym=1;
      asp_trn_fifo_buf[t_end++]=ESCAPE;
-     #ifdef DEBUG_SERIAL
-      fifo_trn_depth++;
-     #endif
      len++;
      }
     else{
      asp_trn_fifo_buf[t_end++]=*data++;
-     #ifdef DEBUG_SERIAL
-      fifo_trn_depth++;
-     #endif
      }
    counter--;
    }
   len-=counter1;
-  asp_trn_fifo_end+=counter1;
+  #ifdef DEBUG_SERIAL
+   _DINT();
+  #endif
+   asp_trn_fifo_end+=counter1;
+  #ifdef DEBUG_SERIAL
+   fifo_trn_depth+=counter1;
+   _EINT();                              // Enable interrupts
+  #endif
   disable_int_no_interrupt();
   //если фифошка не пустая и прерывания запрещены, то разрешаем их
   if ( ((asp_trn_fifo_end&(SERIAL_FIFO_TRN_LEN-1))!=(asp_trn_fifo_start&(SERIAL_FIFO_TRN_LEN-1)))

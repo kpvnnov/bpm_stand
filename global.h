@@ -1,11 +1,14 @@
-//$Id: global.h,v 1.13 2003-05-28 20:14:00 peter Exp $
+//$Id: global.h,v 1.14 2003-06-02 17:15:58 peter Exp $
 
 
 #define DEBUG_SERIAL
 
 
-#define STAT_FIFO_RCV_LEN	32           /* size of fifo STAT buffer   */
-#define STAT1_FIFO_RCV_LEN	32           /* size of fifo STAT buffer   */
+//#define CLEAR_DOG()	WDTCTL=(WDTCTL&0x00FF)+WDTPW+WDTCNTCL
+#define CLEAR_DOG()	WDTCTL=WDTPW|WDTHOLD
+
+#define STAT_FIFO_RCV_LEN	8           /* size of fifo STAT buffer   */
+#define STAT1_FIFO_RCV_LEN	8           /* size of fifo STAT buffer   */
 #define SIZE_STAT	9
 #define SIZE_STAT1	7
 
@@ -67,6 +70,7 @@ u16 work_with_adc_put(void);
 u8 put_packet_type3(u16 info);
 u8 put_packet_type4(void);
 u16 put_packet_type5(void);
+u16 put_packet_type6(void);
 u8 write_asp_trn_fifo(u8 data_wr);
 void init_uart(void);
 void update_diplay(void);
@@ -74,7 +78,7 @@ void update_diplay(void);
 
 
 //последовательный порт
-#define  SERIAL_FIFO_RCV_LEN  64           /* size of receive fifo serial buffer   */
+#define  SERIAL_FIFO_RCV_LEN  8           /* size of receive fifo serial buffer   */
 #define  SERIAL_FIFO_TRN_LEN  64           /* size of transmit fifo serial buffer   */
 
 
@@ -88,7 +92,7 @@ void update_diplay(void);
 //суммируем врем€ сп€чки, перезар€жаем timer_hold
 //иначе суммируем врем€ работы, перезар€жаем timer_hold
 //это должно вызыватьс€ в начале прерывани€
-#define HOLD_TIME_IRQ()  temp_hold=TAR; \
+#define HOLD_TIME_IRQ()  temp_hold=TAR-3; \
                          if (sleep) {timer_sum_sleep+=temp_hold-timer_hold;} \
                          else { \
                           switch(why_job){ \
@@ -105,7 +109,7 @@ void update_diplay(void);
                            } \
                           }
 //суммируем врем€ работы основной программы - этот макрос замен€ет собой уход в сп€чку
-#define SUM_TIME(to_sleep)       _DINT(); \
+#define SUM_TIME(what_job,to_sleep)       _DINT(); \
                           temp_hold=TAR; \
                           switch(why_job){ \
                            default: \
@@ -119,10 +123,12 @@ void update_diplay(void);
                            case STAT_JOB: \
                             timer_sum_stat+=temp_hold-timer_hold;break; \
                            } \
-                         sleep=1;why_job=to_sleep; \
+                         sleep=to_sleep;why_job=what_job; \
                          timer_hold=TAR; \
-                         timer_sum_sleep+=(timer_hold-temp_hold)
+                         if (sleep) \
+                          timer_sum_sleep+=(timer_hold-temp_hold); \
+                         else timer_sum+=(timer_hold-temp_hold)
 
 //суммируем врем€ работы в прерывании и захват начала работы основной программы
-#define SUM_TIME_IRQ()   timer_hold=TAR+3;timer_sum_int+=timer_hold-temp_hold;sleep=0
+#define SUM_TIME_IRQ()   timer_hold=TAR+2;timer_sum_int+=timer_hold-temp_hold;sleep=0
 #define SUM_TIME_IRQ_NOSLEEP()   timer_hold=TAR+3;timer_sum_int+=timer_hold-temp_hold
