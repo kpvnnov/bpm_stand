@@ -1,4 +1,4 @@
-//$Id: global.h,v 1.14 2003-06-02 17:15:58 peter Exp $
+//$Id: global.h,v 1.15 2003-06-02 19:58:54 peter Exp $
 
 
 #define DEBUG_SERIAL
@@ -7,10 +7,9 @@
 //#define CLEAR_DOG()	WDTCTL=(WDTCTL&0x00FF)+WDTPW+WDTCNTCL
 #define CLEAR_DOG()	WDTCTL=WDTPW|WDTHOLD
 
-#define STAT_FIFO_RCV_LEN	8           /* size of fifo STAT buffer   */
-#define STAT1_FIFO_RCV_LEN	8           /* size of fifo STAT buffer   */
-#define SIZE_STAT	9
-#define SIZE_STAT1	7
+
+
+
 
 
 typedef unsigned char  u08;
@@ -74,13 +73,21 @@ u16 put_packet_type6(void);
 u8 write_asp_trn_fifo(u8 data_wr);
 void init_uart(void);
 void update_diplay(void);
+void work_with_serial_rec(void);
 
 
 
 //последовательный порт
-#define  SERIAL_FIFO_RCV_LEN  8           /* size of receive fifo serial buffer   */
+//#define  SERIAL_FIFO_RCV_LEN  8           /* size of receive fifo serial buffer   */
 #define  SERIAL_FIFO_TRN_LEN  64           /* size of transmit fifo serial buffer   */
+#define  MAXPACKETLEN	64	//максимальная длина одного пакета
 
+
+//статистика
+#define STAT_FIFO_RCV_LEN	8           /* size of fifo STAT buffer   */
+#define STAT1_FIFO_RCV_LEN	8           /* size of fifo STAT buffer   */
+#define SIZE_STAT	9
+#define SIZE_STAT1	8
 
 #define  ALL_JOB	0
 #define  DISPLAY_JOB	1

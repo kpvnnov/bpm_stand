@@ -1,4 +1,4 @@
-// $Id: timer_a.c,v 1.14 2003-06-02 17:15:58 peter Exp $
+// $Id: timer_a.c,v 1.15 2003-06-02 19:58:54 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -21,6 +21,7 @@ extern u16 why_job;
 
 #ifdef DEBUG_SERIAL
 extern u16 packet_in_fifo;
+extern u16 packet_in_fifo_max;
 extern u16 fifo_trn_depth;
 extern u16 packet_fifo_full;
 extern u16 fifo_trn_depth_max;
@@ -264,10 +265,10 @@ HOLD_TIME_IRQ()
       else {
 //       error_adc=1;
         #ifdef CABLE
-         IE2 &= ~UTXIE1;		
+//         IE2 &= ~UTXIE1;		
         #endif //CABLE
         #ifdef STEND
-         IE1 &= ~UTXIE0;		
+//         IE1 &= ~UTXIE0;		
         #endif //STEND
        }
       break;
@@ -275,10 +276,15 @@ HOLD_TIME_IRQ()
     #ifdef CABLE
      P1OUT = temp_led;                     // return led state
     #endif
+
+    #ifdef CABLE
     _BIC_SR_IRQ(CPUOFF);               // Clear LPM0, SET BREAKPOINT HERE
     SUM_TIME_IRQ();
+    #endif
 
-//    SUM_TIME_IRQ_NOSLEEP();
+    #ifdef STEND
+     SUM_TIME_IRQ_NOSLEEP();
+    #endif //stend
     break;
    case  4://тактирование часов
      //в режиме SMCLK
@@ -293,6 +299,18 @@ HOLD_TIME_IRQ()
     switch(mode_timer){
      case 0: //(cчет таймера от ACLK)
       CCR2 += 256;
+      if (switch_speed_timer){
+       mode_timer=1;
+       switch_speed_timer=0;
+       TACTL&=~(MC0|MC1); //stop
+       TACTL&=~(TASSEL0+TASSEL1); //обнуляем биты выбора источника
+       TACTL|=TASSEL_2;	//выбираем Timer A clock source select: 2 - SMCLK 
+       TACCTL1 = OUTMOD_4+CCIE;                   // CCR1 setup
+       TACCR1=TAR+0x100;
+//       ADC12CTL0 |= ENC;                     // Enable conversions
+//       ADC12CTL0 |= ADC12SC;                 // Start conversion
+       TACTL|=MC_2;	//запускаем Timer A mode control: 2 - Continous up
+       }
       break;
      case 1: //(счет таймера от SMCLK)
       CCR2 += 57600;
@@ -338,18 +356,6 @@ HOLD_TIME_IRQ()
     break; //тактирование часов
 
    case 10: // overflow
-    if (switch_speed_timer){
-     mode_timer=1;
-     switch_speed_timer=0;
-     TACTL&=~(MC0|MC1); //stop
-     TACTL&=~(TASSEL0+TASSEL1); //обнуляем биты выбора источника
-     TACTL|=TASSEL_2;	//выбираем Timer A clock source select: 2 - SMCLK 
-     TACCTL1 = OUTMOD_4+CCIE;                   // CCR1 setup
-     TACCR1=TAR+0x100;
-//     ADC12CTL0 |= ENC;                     // Enable conversions
-//     ADC12CTL0 |= ADC12SC;                 // Start conversion
-     TACTL|=MC_2;	//запускаем Timer A mode control: 2 - Continous up
-     }
     t_stat=&stat1_buf[(stat1_rcv_fifo_end & (STAT1_FIFO_RCV_LEN-1))*SIZE_STAT1];
     *t_stat++=packet_in_fifo;
 
@@ -357,13 +363,10 @@ HOLD_TIME_IRQ()
     fifo_trn_depth_max=0;
 
     *t_stat++=packet_fifo_full;
-//    packet_fifo_full=0;
 
     *t_stat++=error_uart_depth;
-//    error_uart_depth=0;
 
     *t_stat++=error_send_serial;
-//    error_send_serial=0;
 
     *t_stat++=length_sended_2_fifo_max;
     length_sended_2_fifo_max=0;
@@ -371,6 +374,8 @@ HOLD_TIME_IRQ()
     *t_stat++=length_sended_2_fifo_min;
     length_sended_2_fifo_min=0xFFF;
 
+    *t_stat++=packet_in_fifo_max;
+    packet_in_fifo_max=0;
 //    stat1_rcv_fifo_end++;
 
     #ifdef CABLE

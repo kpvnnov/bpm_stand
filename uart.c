@@ -1,4 +1,4 @@
-// $Id: uart.c,v 1.17 2003-06-02 17:15:58 peter Exp $
+// $Id: uart.c,v 1.18 2003-06-02 19:58:54 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -26,6 +26,7 @@ extern volatile unsigned int  stat1_rcv_fifo_end;        /* stat receive  buffer
 
 #ifdef DEBUG_SERIAL
 u16 packet_in_fifo;
+u16 packet_in_fifo_max;
 u16 fifo_trn_depth;
 u16 packet_fifo_full;
 u16 fifo_trn_depth_max;
@@ -36,7 +37,9 @@ u16 length_sended_2_fifo_max;
 u16 length_sended_2_fifo_min;
 #endif //DEBUG_SERIAL
 
-
+u16 current_rec_packet;
+u16 rec_length;
+u16 received_packed;
 
 extern unsigned int results0[ADC_FIFO_RCV_LEN];
 extern unsigned int results1[ADC_FIFO_RCV_LEN];
@@ -76,17 +79,19 @@ _____
 0x05      пакет данных статистики
 */
 
-#define DATA5PACKET     24
-#define DATA6PACKET     20
 
 #define  MAXQUE 8		//длина очереди пакетов
-#define  MAXPACKETLEN	64	//максимальная длина одного пакета
 #define  CRCPACKET	2	//смещение (с конца) положения в пакете CRC
 #define  LENPACKET	3	//смещение (с конца) положения в пакете длины пакета
 #define  TYPEPACKET     4	//смещение (с конца) положения в пакете типа пакета
 #define  NUMPACKET	5	//смещение (с конца) положения в пакете номера пакета
+
 #define  DATA3PACKET    24	//смещение (с конца) положения в пакете размещения данных
-//#define  SIZEDATA3	12	//количество байт данных в пакете типа 3
+#define  DATA5PACKET     24
+#define  DATA6PACKET     20
+
+
+
 #define  ESCAPE		0x7D
 #define  EOFPACKET	0x7E	//код признака конца кадра
 volatile unsigned int  asp_trn_fifo_start;      /* serial transmit buffer start index      */
@@ -94,16 +99,18 @@ volatile unsigned int  asp_trn_fifo_start;      /* serial transmit buffer start 
 unsigned int  asp_trn_fifo_end;        /* serial transmit flash buffer end index        */
 u16   asp_trn_fifo_buf[SERIAL_FIFO_TRN_LEN];           /* storage for serial transmit  buffer      */
 
-unsigned int  asp_rcv_fifo_start;      /* serial receive buffer start index      */
+//unsigned int  asp_rcv_fifo_start;      /* serial receive buffer start index      */
 
-volatile unsigned int  asp_rcv_fifo_end;        /* serial receive flash buffer end index        */
+//volatile unsigned int  asp_rcv_fifo_end;        /* serial receive flash buffer end index        */
 
-u8    asp_rcv_fifo_buf[SERIAL_FIFO_RCV_LEN];           /* storage for receive transmit  buffer      */
+//u8    asp_rcv_fifo_buf[SERIAL_FIFO_RCV_LEN];           /* storage for receive transmit  buffer      */
 
-#define NOTSENDED 2
-#define WAIT_ACK  3
-#define FREEPLACE 0
-#define PACKBUSY  1
+#define FREEPLACE 0	//свободный пакет
+#define PACKBUSY  1	//занятый под обработку
+#define NOTSENDED 2	//неотправленный пакет
+#define WAIT_ACK  3     //ожидающий подтверждения
+#define PACKREC   4	//принятый пакет
+
 struct que{
  u8 busy;    //место занято. 
 		//0 - свободно
@@ -190,9 +197,18 @@ int shift_fifo;
 u16* t_p;
 //u8* t_r;
 	//захватываем свободный пакет
- if ((n=hold_packet())==MAXQUE) return 0; //свободных пакетов нет
+ disable_int_no_interrupt();
+ n=hold_packet();
+ enable_int_no_interrupt();
+ if (n==MAXQUE) {
+  #ifdef DEBUG_SERIAL
+  packet_fifo_full++;
+  #endif //DEBUG_SERIAL
+  return 0; //свободных пакетов нет
+  }
  #ifdef DEBUG_SERIAL
  packet_in_fifo++;
+ if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
  #endif //DEBUG_SERIAL
  shift_fifo=(n+1)*MAXPACKETLEN;
 	//копируем туда данные для пакета
@@ -235,9 +251,18 @@ int shift_fifo;
 //u16* t_p;
 //u16* t_s;
 	//захватываем свободный пакет
- if ((n=hold_packet())==MAXQUE) return 0; //свободных пакетов нет
+ disable_int_no_interrupt();
+ n=hold_packet();
+ enable_int_no_interrupt();
+ if (n==MAXQUE) {
+  #ifdef DEBUG_SERIAL
+  packet_fifo_full++;
+  #endif //DEBUG_SERIAL
+  return 0; //свободных пакетов нет
+  }
  #ifdef DEBUG_SERIAL
  packet_in_fifo++;
+ if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
  #endif //DEBUG_SERIAL
  shift_fifo=(n+1)*MAXPACKETLEN;
 	//копируем туда данные для пакета
@@ -275,9 +300,18 @@ int n;
 int crc;
 int shift_fifo;
 	//захватываем свободный пакет
- if ((n=hold_packet())==MAXQUE) return 0; //свободных пакетов нет
+ disable_int_no_interrupt();
+ n=hold_packet();
+ enable_int_no_interrupt();
+ if (n==MAXQUE) {
+  #ifdef DEBUG_SERIAL
+  packet_fifo_full++;
+  #endif //DEBUG_SERIAL
+  return 0; //свободных пакетов нет
+  }
  #ifdef DEBUG_SERIAL
  packet_in_fifo++;
+ if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
  #endif //DEBUG_SERIAL
  shift_fifo=(n+1)*MAXPACKETLEN;
 	//копируем туда данные для пакета
@@ -309,7 +343,10 @@ int n;
 int crc;
 int shift_fifo;
 	//захватываем свободный пакет
- if ((n=hold_packet())==MAXQUE) {
+ disable_int_no_interrupt();
+ n=hold_packet();
+ enable_int_no_interrupt();
+ if (n==MAXQUE) {
   #ifdef DEBUG_SERIAL
   packet_fifo_full++;
   #endif //DEBUG_SERIAL
@@ -317,6 +354,7 @@ int shift_fifo;
   }
  #ifdef DEBUG_SERIAL
  packet_in_fifo++;
+ if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
  #endif //DEBUG_SERIAL
 
  shift_fifo=(n+1)*MAXPACKETLEN;
@@ -338,6 +376,46 @@ int shift_fifo;
 return 1;
 }
 
+void work_with_serial_rec(void){
+int x;
+int crc;
+u16 shift_fifo;
+ for (x=0;x<MAXQUE;x++){
+  if (queue[x].busy==PACKREC){
+   received_packed--;
+   //подсчитать CRC
+   shift_fifo=x*MAXPACKETLEN+queue[x].len;
+   if (crc16(&packets[x*MAXPACKETLEN],queue[x].len)==0){ //сrc совпала?
+    switch(packets[shift_fifo-TYPEPACKET]){
+     case 0x07:
+      break;
+     }
+    //отправить подтверждение
+    shift_fifo=(x+1)*MAXPACKETLEN;
+   	//помещаем порядковый номер пакета для подтверждения
+    packets[shift_fifo-NUMPACKET]=packets[x*MAXPACKETLEN+queue[x].len-NUMPACKET];
+    packets[shift_fifo-LENPACKET]=NUMPACKET;	//длина подтверждающего пакета
+   	//указываем тип пакета
+    packets[shift_fifo-TYPEPACKET]=0x01;		//подтверждающий пакет
+   	//подсчитываем и помещаем CRC пакета
+    crc=crc16(&packets[shift_fifo-NUMPACKET],NUMPACKET-2);
+    packets[shift_fifo-CRCPACKET]=crc>>8;
+    packets[shift_fifo-CRCPACKET+1]=crc;
+  
+   	//в справочном массиве указываем длину пакета
+    queue[x].len=NUMPACKET;
+    #ifdef DEBUG_SERIAL
+    packet_in_fifo++;
+    if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
+    #endif //DEBUG_SERIAL
+    queue[x].busy=NOTSENDED;
+    }
+   else{
+    queue[x].busy=FREEPLACE;
+    }
+   }
+  }
+}
 
 
 //u8 test[4]={'0','1','2','3'};
@@ -455,12 +533,16 @@ int x;
 //+ UTXIE0;                
   for (x=0;x<MAXQUE;x++) queue[x].busy=FREEPLACE;
   last_sended_packet=MAXQUE;
+  current_rec_packet=0;
+  rec_length=0;
+  queue[0].busy=PACKBUSY;
  #ifdef DEBUG_SERIAL
   fifo_trn_depth_max=0;
   fifo_trn_depth=0;
   packet_in_fifo=0;
   packet_fifo_full=0;
  #endif
+  received_packed=0;
 #endif //STEND
 }
 
@@ -521,46 +603,71 @@ HOLD_TIME_IRQ()
 
 SUM_TIME_IRQ_NOSLEEP();
 }
-interrupt[UART1RX_VECTOR] void usart0_rx (void)
+u16 esc_rec;
+#ifdef STEND
+//прерывание serial port 0
+interrupt[UART0RX_VECTOR] void usart0_rx (void)
 {
+#endif //stend
+#ifdef CABLE
+//прерывание serial port 1
+interrupt[UART1RX_VECTOR] void usart1_rx (void)
+{
+#endif //cable
 
-//  while ((IFG1 & UTXIFG0) == 0);        // USART0 TX buffer ready?
-//  TXBUF0 = ;                      // RXBUF0 to TXBUF0
+u16 received_sym;
+u16 shift_fifo;
+HOLD_TIME_IRQ()
+ #ifdef CABLE
+  received_sym=RXBUF1;
+ #endif //cable
+ #ifdef STEND
+  received_sym=RXBUF0;
+ #endif //stend
+ if (current_rec_packet>=MAXQUE){
+  current_rec_packet=hold_packet();
+  if (current_rec_packet>=MAXQUE) return; // свободный пакет не дали
+  rec_length=0;
+  }
+ shift_fifo=current_rec_packet*MAXPACKETLEN+rec_length;
+ switch(received_sym){
+  case ESCAPE:
+   esc_rec=1;
+   SUM_TIME_IRQ_NOSLEEP();
+   break;
+  case EOFPACKET:
+   queue[current_rec_packet].busy=PACKREC;
+   queue[current_rec_packet].len=rec_length;
+   current_rec_packet=MAXQUE;
+   received_packed++;
+   _BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
+   SUM_TIME_IRQ();
+   break;
+  default:
+   if (esc_rec){
+    esc_rec=0;
+    packets[shift_fifo++]=received_sym^0x40;
+    }
+   else{
+    packets[shift_fifo++]=received_sym;
+    rec_length++;
+    if (shift_fifo>=MAXPACKETLEN){ //переполнение приема (нет EOF)
+     rec_length=0;
+     }
+    }
+   SUM_TIME_IRQ_NOSLEEP();
+   break;
+  }
 
 
-//так как нет inline, то раскрываем  write_asp_rcv_fifo(RXBUF0);
-//u8 write_asp_rcv_fifo(u8 data_wr){
-// if ( ( (asp_rcv_fifo_end+1)&(SERIAL_FIFO_RCV_LEN-1))== (asp_rcv_fifo_start&(SERIAL_FIFO_RCV_LEN-1)) )
-//  return 0;
-// asp_rcv_fifo_buf[asp_rcv_fifo_end++ & (SERIAL_FIFO_RCV_LEN-1)]=data_wr;
-// return 1;
-//}
 
-
-// - добавить в отладочном режиме эту проверку if ( ( (asp_rcv_fifo_end+1)&(SERIAL_FIFO_RCV_LEN-1))!= (asp_rcv_fifo_start&(SERIAL_FIFO_RCV_LEN-1)) )
-  asp_rcv_fifo_buf[asp_rcv_fifo_end++ & (SERIAL_FIFO_RCV_LEN-1)]=RXBUF1;
-
-
-
-// if (temp_iosr_serial&( (1<<bit_OE)| //Overrun occurs - переполнение приема
-//                 (1<<bit_FE)| //framing error
-//                 (1<<bit_BI)   //break
-//               )
-//    ) { 
-//  portADTR;
-//  portADTR;	//два раза читаем порт, чтобы освободиться от данных
-//  rDIOSR&=0x00FF;
-//  rDIOSR|=0x2600;	//сброс флагов BI(break interrupt)
-//                        //FE(framing error)
-//                        //переполнения(OE-overrun error) в IOSR
-//  portIOSR=rDIOSR;
 
 }
 //чтение буфера приема
-u16 read_asp_rcv_fifo(void){ 
- if (asp_rcv_fifo_start==asp_rcv_fifo_end) return 0;
- return (asp_rcv_fifo_buf[asp_rcv_fifo_start++ & (SERIAL_FIFO_RCV_LEN-1)]|0x0100);
-}
+//u16 read_asp_rcv_fifo(void){ 
+// if (asp_rcv_fifo_start==asp_rcv_fifo_end) return 0;
+// return (asp_rcv_fifo_buf[asp_rcv_fifo_start++ & (SERIAL_FIFO_RCV_LEN-1)]|0x0100);
+//}
 
 u16 escape_sym;
 u16 send_serial_massiv(u8* data,u16 len){

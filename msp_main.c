@@ -1,5 +1,5 @@
 //********************************************************
-// $Id: msp_main.c,v 1.20 2003-06-02 17:15:58 peter Exp $
+// $Id: msp_main.c,v 1.21 2003-06-02 19:58:54 peter Exp $
 //********************************************************
 
 //#include <msp430x11x1.h>
@@ -70,6 +70,7 @@ extern u16 fifo_trn_depth;
 
 #endif //DEBUG_SERIAL
 
+extern u16 received_packed;
 
 
 
@@ -463,10 +464,14 @@ int i;
     #ifdef CABLE
      P1OUT |= 0x01;                      // Set P1.0 LED on
     #endif
+    while(received_packed){
+      work_with_serial_rec();
+     }
     while(fifo_trn_depth<(SERIAL_FIFO_TRN_LEN/2)){
      if (packet_in_fifo==0) break;
       work_with_serial();
      }
+
     #ifdef CABLE
      P1OUT &= ~0x01;                     // Reset P1.0 LED off
     #endif
