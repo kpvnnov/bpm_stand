@@ -1,4 +1,4 @@
-// $Id: uart_s.c,v 1.2 2003-06-09 20:09:18 peter Exp $
+// $Id: uart_s.c,v 1.3 2003-06-10 14:27:38 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -123,7 +123,7 @@ _____
 #define  DATA5PACKET     (SIZE_STAT*2+6)
 #define  DATA6PACKET     (SIZE_STAT1*2+6)
 #define  DATA7PACKET     (32+6)
-#define  DATAxAPACKET    (2+2*2+6)
+#define  DATAxAPACKET    (2+4*2+6)
 
 
 #define  ESCAPE		0x7D
@@ -418,7 +418,7 @@ u16* t_p;
 	//копируем туда данные для пакета
  t_p=(u16*)&packets[shift_fifo-DATAxAPACKET];
 
- *t_p++=(results[info]&0xFF)|2;	//пока два выводимых канала
+ *t_p++=((results[info]&0xFF)<<8)|2;	//пока два выводимых канала
  *t_p++=results0[info];
  *t_p++=results1[info];
  *t_p++=results2[info];

@@ -1,5 +1,5 @@
 
-// $Id: adc_s.c,v 1.2 2003-06-09 20:09:17 peter Exp $
+// $Id: adc_s.c,v 1.3 2003-06-10 14:27:38 peter Exp $
 #include  <msp430x14x.h>
 #include "global.h"
 
@@ -52,6 +52,7 @@ int sum;
 HOLD_TIME_IRQ()
  end_adc_conversion=1;
  if (chanel_convert&0x40){
+  sh=(adc_rcv_fifo_end & (ADC_FIFO_RCV_LEN-1));
   switch(rotate_channel){
    case 0:
     sum=0;
@@ -152,7 +153,7 @@ void init_adc(void){
         //SHT1_xx - Sample-and-hold time. These bits define the number 
 	//	    of ADC12CLK cycles in the sampling period for 
 	//	    registers ADC12MEM8 to ADC12MEM15
-  ADC12CTL0 = ADC12ON+REFON+MSC+SHT0_15+SHT1_15;    // Turn on ADC12, set sampling time
+  ADC12CTL0 = ADC12ON+REFON+MSC+SHT0_8+SHT1_8;    // Turn on ADC12, set sampling time
 //REF2_5V
 	//ADC12 SSELx Bits 4-3
 	//	ADC12 clock source select
@@ -211,11 +212,12 @@ u16 work_with_adc_put(void){
 //  put_packet_type4();
   }
 
-  if (results[adc_rcv_fifo_start& (ADC_FIFO_RCV_LEN-1)]&0x8000)
+  if (results[adc_rcv_fifo_start& (ADC_FIFO_RCV_LEN-1)]&0x8000){
    if (put_packet_typeA(adc_rcv_fifo_start& (ADC_FIFO_RCV_LEN-1))){
     adc_rcv_fifo_start++;
     return 1;
     }
+   }
   else
   if (put_packet_type7(adc_rcv_fifo_start& (ADC_FIFO_RCV_LEN-1))){
    adc_rcv_fifo_start++;

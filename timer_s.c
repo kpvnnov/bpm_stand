@@ -1,4 +1,4 @@
-// $Id: timer_s.c,v 1.2 2003-06-09 20:09:18 peter Exp $
+// $Id: timer_s.c,v 1.3 2003-06-10 14:27:38 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -302,6 +302,12 @@ HOLD_TIME_IRQ()
         chanel_convert=chanel;
         first_channel=chanel_convert;
         rotate_channel=0;
+        set_adc(chanel_convert);
+        }
+       else
+       if ( ((chanel_convert&0x40)==0) &&
+            (dac[chanel_convert&((NUM_CHANEL>>1)-1)]&0x8000) ){
+        dac[chanel_convert&((NUM_CHANEL>>1)-1)]&=0x7FFF;
         set_adc(chanel_convert);
         }
        ADC12CTL0 |= ADC12SC;                 // Start conversion
