@@ -1,2 +1,8 @@
 
-iar\bin\icc430.exe -K -Iiar\inc\  -l uart uart
+iar\bin\icc430.exe -ODebug\Obj\ -e -K -gA -s9 -RCODE -r0 -LDebug\List\ -q -T -t8 -ADebug\List\ -Iiar\inc\ uart.c
+
+rem #       Command line  =  -OE:\work\msp\Debug\Obj\ -e -K -gA -s9 -RCODE -r0   #
+rem #                        -LE:\work\msp\Debug\List\ -q -T -t8                 #
+rem #                        -AE:\work\msp\Debug\List\                           #
+rem #                        -IF:\Documents and Settings\peter_safe\msp\IAR Systems\ew23\430\inc\ #
+rem #                        E:\work\msp\msp_main.c                              #

@@ -1,4 +1,4 @@
-// $Id: timer_a.c,v 1.9 2003-05-22 20:00:27 peter Exp $
+// $Id: timer_a.c,v 1.10 2003-05-23 17:00:28 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -30,6 +30,7 @@ int switch_speed_timer;
 
 // дисплей
 int mode_display;
+int update_display;
 	//это время в формате long для показа на индикатор
 time_in time_to_show;
 int symbl[4];

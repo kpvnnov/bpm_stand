@@ -1,5 +1,5 @@
 //********************************************************
-// $Id: msp_main.c,v 1.15 2003-05-22 20:00:26 peter Exp $
+// $Id: msp_main.c,v 1.16 2003-05-23 17:00:28 peter Exp $
 //********************************************************
 
 //#include <msp430x11x1.h>
@@ -33,6 +33,7 @@ extern int mode_display;
 extern int second_point;
 extern int invert;
 extern int symbl[4];
+extern int update_display;
 
 	//это время в формате long для показа на индикатор
 extern time_in time_to_show;
@@ -49,10 +50,10 @@ extern s16 fifo_trn_depth;
 
 
 
-#define ACLK_GO	500	//количество достаточных попыток запуска
+#define ACLK_GO	2500	//количество достаточных попыток запуска
 //возвращаем не ноль, если часовой кварц работает
 int test_run_LFXT1CLK(void){
-int c=1000;	//общее количество попыток запуска ACLK
+int c=5000;	//общее количество попыток запуска ACLK
 int t=0;	//счетчик попыток "удачного бега"
 int last_att=9;
 int i;
@@ -93,8 +94,8 @@ unsigned int to_compare,to_compare1;
 	//сброс WatchDog
   if (t>ACLK_GO) break;	//считаем, что часовой кварц запустился
   WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
-  if ((t>>6)!=last_att){
-    last_att=t>>6;
+  if ((t>>8)!=last_att){
+    last_att=t>>8;
     symbl[3]=0x0A;	//'A'
     symbl[2]=0x0C;	//'C'
     symbl[1]=0x15;	//'L'
