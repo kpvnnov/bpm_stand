@@ -2,3 +2,4 @@
 tag-1 stend.pcb Phantom0.pcb 28.03.2003
 tag-2 stend.pcb Phantom05.pcb 09.04.2003 - конечный вариант - отдан в заказ
 tag-3 stend.pcb Phantom052.pcb 23.05.2003 - конечный вариант - коррекция надписей для монтажа
+tag-4 stend.sch Phantom0.sch  21.03.2003 - схема фантома - начало разводки платы
