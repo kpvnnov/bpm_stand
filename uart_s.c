@@ -1,7 +1,10 @@
-// $Id: uart_s.c,v 1.11 2003-10-17 14:33:54 peter Exp $
+// $Id: uart_s.c,v 1.12 2003-11-03 17:01:49 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
+
+
+#define STEND_N 2
 
 extern u16 temp_hold;
 extern u16 timer_sum_sleep;
@@ -17,7 +20,12 @@ extern u16 why_job;
 
 u16 stop_transmit;
 u16 analog_on;
+u16 temperature;
+u16 stop_adc;
+u16 send_correction_temperature;
+
 extern u16 chanel_convert;
+
 
 extern unsigned int current_level;
 extern unsigned int what_doing;
@@ -262,8 +270,23 @@ _________________________________________________________________
             3 бит - включение преобразования АЦП
             4 бит - выключение UART
             5 бит - включение UART
+            6 бит - выключение температуры
+            7 бит - включение температуры
 
     общее количество данных 1 байт
+_________________________________________________________________
+0x19	  Данные температуры
+     содержание пакета:
+      2 байта - измеренное значение
+_________________________________________________________________
+0x1A	  Данные коррекции температуры (раз в секунду)
+     содержание пакета:
+      2 байта - наклон
+      2 байта - смещение
+      2 байта - значение АЦП (первая точка)
+      2 байта - значение температуры умноженное на 100 (первая точка)
+      2 байта - значение АЦП (вторая точка)
+      2 байта - значение температуры умноженное на 100 (вторая точка)
 
 */
 
@@ -286,7 +309,8 @@ _________________________________________________________________
 //#define  DATAxAPACKET    (2+4*NUM_MULTICHANNEL+2+6)
 //убрал температуру из пакета
 #define  DATAxAPACKET    (2+4*NUM_MULTICHANNEL+6)
-
+#define  DATA19PACKET    (2+6)
+#define  DATA1APACKET	 (6*2+6)
 #if DATAxAPACKET>=MAXPACKETLEN
  error size of fifo packets MAXPACKETLEN
 #endif
@@ -555,7 +579,112 @@ u16* t_p;
  queue[n].busy=NOTSENDED;
 return 1;
 }
+u8 put_packet_type19(u16 info){
+//int z;
+int n;
+int crc;
+int shift_fifo;
+u16* t_p;
+	//захватываем свободный пакет
+ disable_int_no_interrupt();
+ n=hold_packet();
+ enable_int_no_interrupt();
+ if (n==MAXQUE) {
+  #ifdef DEBUG_SERIAL
+  packet_fifo_full++;
+  #endif //DEBUG_SERIAL
+  return 0; //свободных пакетов нет
+  }
+ #ifdef DEBUG_SERIAL
+ packet_in_fifo++;
+ if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
+ #endif //DEBUG_SERIAL
+ shift_fifo=(n+1)*MAXPACKETLEN;
+	//копируем туда данные для пакета
+ t_p=(u16*)&packets[shift_fifo-DATA19PACKET];
 
+ *t_p++=multi_count0[0][info];//температура
+
+	//помещаем в пакет его длину (без завершающего EOFPACKET)
+ packets[shift_fifo-LENPACKET]=DATA19PACKET;
+	//помещаем (и увеличиваем) порядковый номер пакета
+ packets[shift_fifo-NUMPACKET]=counts_packet;
+ queue[n].numeric=counts_packet++;
+	//указываем тип пакета
+ packets[shift_fifo-TYPEPACKET]=0x19;
+	//подсчитываем и помещаем CRC пакета
+ crc=crc16(&packets[shift_fifo-DATA19PACKET],DATA19PACKET-2);
+ packets[shift_fifo-CRCPACKET]=crc>>8;
+ packets[shift_fifo-CRCPACKET+1]=crc;
+
+	//в справочном массиве указываем длину пакета
+ queue[n].len=DATA19PACKET;
+ queue[n].busy=NOTSENDED;
+return 1;
+}
+
+u8 put_packet_type1A(void){
+u16* t_p;
+int n;
+int crc;
+int shift_fifo;
+	//захватываем свободный пакет
+ disable_int_no_interrupt();
+ n=hold_packet();
+ enable_int_no_interrupt();
+ if (n==MAXQUE) {
+  #ifdef DEBUG_SERIAL
+  packet_fifo_full++;
+  #endif //DEBUG_SERIAL
+  return 0; //свободных пакетов нет
+  }
+ #ifdef DEBUG_SERIAL
+ packet_in_fifo++;
+ if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
+ #endif //DEBUG_SERIAL
+
+ shift_fifo=(n+1)*MAXPACKETLEN;
+	//копируем туда данные для пакета
+ t_p=(u16*)&packets[shift_fifo-DATA1APACKET];
+
+#if   STEND_N == 1
+ *t_p++=41294;	//наклон
+ *t_p++=42148;	//смещение
+ *t_p++=43344;	//значение АЦП (первая точка)
+ *t_p++=2266;	//значение температуры умноженное на 100 (первая точка)
+ *t_p++=43680;	//значение АЦП (вторая точка)
+ *t_p++=4460;	//значение температуры умноженное на 100 (вторая точка)
+ warning!!!
+
+#elif STEND_N == 2
+ *t_p++=41294;	//наклон
+ *t_p++=42148;	//смещение
+ *t_p++=43344;	//значение АЦП (первая точка)
+ *t_p++=2266;	//значение температуры умноженное на 100 (первая точка)
+ *t_p++=43680;	//значение АЦП (вторая точка)
+ *t_p++=4460;	//значение температуры умноженное на 100 (вторая точка)
+#else
+ warning!!!
+#endif 
+
+	//помещаем в пакет его длину (без завершающего EOFPACKET)
+ packets[shift_fifo-LENPACKET]=DATA1APACKET;
+	//помещаем (и увеличиваем) порядковый номер пакета
+ packets[shift_fifo-NUMPACKET]=counts_packet;
+ queue[n].numeric=counts_packet++;
+	//указываем тип пакета
+ packets[shift_fifo-TYPEPACKET]=0x1A;
+	//подсчитываем и помещаем CRC пакета
+ crc=crc16(&packets[shift_fifo-DATA1APACKET],DATA1APACKET-2);
+ packets[shift_fifo-CRCPACKET]=crc>>8;
+ packets[shift_fifo-CRCPACKET+1]=crc;
+
+	//в справочном массиве указываем длину пакета
+ queue[n].len=DATA1APACKET;
+ queue[n].busy=NOTSENDED;
+send_correction_temperature=0;
+return 1;
+}
 
 
 void work_with_serial_rec(void){
@@ -622,11 +751,16 @@ u16 shift_fifo;
        P1OUT&=~BIT0;
 
        analog_on=1;
-       P2OUT|=BIT0+BIT1+BIT3;
+       P2OUT|=BIT0+BIT1+BIT3;	//включаем ЦАП
+
+       P5SEL |= 0x70; 		// MCLK, SMCLK,ACLK на вывод
+
 
        }
 
       else{
+       P5SEL&= ~0x70; 		// MCLK, SMCLK,ACLK выключаем на вывод
+
        P2OUT&=~(BIT0+BIT1+BIT3);
 
        P3OUT&=~(BIT0+BIT1+BIT2+BIT3);
@@ -635,16 +769,18 @@ u16 shift_fifo;
        P1OUT|=BIT0;
        }
 
-      if (packets[shift_fifo-REGIM_JOB]&0x04){ //выключить АЦП
+      if ((stop_adc==0) && packets[shift_fifo-REGIM_JOB]&0x04){ //выключить АЦП
        disable_int_no_interrupt();
        chanel_convert&=~0x40; //выключаем пакетный режим
        off_adc();
+       stop_adc=1;
        enable_int_no_interrupt();
        }
 
-      if (packets[shift_fifo-REGIM_JOB]&0x08){ //включить АЦП
+      if ((stop_adc==1) && packets[shift_fifo-REGIM_JOB]&0x08){ //включить АЦП
        disable_int_no_interrupt();
        init_adc();
+       stop_adc=0;
        enable_int_no_interrupt();
        }
       if (packets[shift_fifo-REGIM_JOB]&0x10){ //выключить UART
@@ -661,6 +797,23 @@ u16 shift_fifo;
        stop_transmit=0;
        //  P3DIR = 0xFF;                         // All P3.x outputs
        //  P3OUT = 0;                            // All P3.x reset
+       enable_int_no_interrupt();
+       }
+      if ( (temperature==1) && packets[shift_fifo-REGIM_JOB]&0x40){ //выключить температуру
+       disable_int_no_interrupt();
+       temperature=0;
+       if (stop_adc==0) { //если АЦП не остановлен
+        set_adc(chanel_convert);
+        ADC12CTL0 |= ADC12SC;                 // Start conversion
+        }
+       enable_int_no_interrupt();
+       }
+      if ((stop_adc==0) && (temperature==0) && packets[shift_fifo-REGIM_JOB]&0x80){ //включить температуру
+       disable_int_no_interrupt();
+       temperature=1;
+       send_correction_temperature=10000;
+       set_adc_temperature(); 
+       ADC12CTL0 |= ADC12SC;                 // Start conversion
        enable_int_no_interrupt();
        }
 

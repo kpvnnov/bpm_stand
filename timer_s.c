@@ -1,4 +1,4 @@
-// $Id: timer_s.c,v 1.9 2003-10-17 14:33:54 peter Exp $
+// $Id: timer_s.c,v 1.10 2003-11-03 17:01:49 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -20,7 +20,8 @@ extern u16 why_job;
 
 extern u16 stop_transmit;
 extern u16 analog_on;
-
+extern u16 temperature;
+extern u16 send_correction_temperature;
 
 extern unsigned int current_level;
 extern unsigned int what_doing;
@@ -322,6 +323,11 @@ HOLD_TIME_IRQ()
       CCR1 += (18432);
       #endif
       #ifdef STEND
+      if (temperature==1){
+       CCR1 += (9216);
+       send_correction_temperature++;
+       }
+      else
       if (chanel_convert&0x40){ //"серийное" преобразование каналов
 //  jitter_adc=TAR;
 //  if (CCR1>jitter_adc) jitter_adc=CCR1-jitter_adc; else jitter_adc=jitter_adc-CCR1;
@@ -369,7 +375,7 @@ HOLD_TIME_IRQ()
       #endif
       if (end_adc_conversion){
        end_adc_conversion=0;
-       jitter_pusk=TAR;
+//       jitter_pusk=TAR;
 //       ADC12CTL0 |= ADC12SC;                 // Start conversion
        if (chanel!=chanel_convert){
         chanel_convert=chanel;

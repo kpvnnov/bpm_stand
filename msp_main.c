@@ -1,5 +1,5 @@
 //********************************************************
-// $Id: msp_main.c,v 1.25 2003-10-17 14:33:54 peter Exp $
+// $Id: msp_main.c,v 1.26 2003-11-03 17:01:48 peter Exp $
 //********************************************************
 
 //#include <msp430x11x1.h>
@@ -25,6 +25,10 @@ u16 timer_diff_max;
 u16 why_job;
 
 extern u16 analog_on;
+extern u16 temperature;
+extern u16 stop_adc;
+extern u16 send_correction_temperature;
+
 
 extern unsigned int what_doing;
 
@@ -301,6 +305,8 @@ int i;
 	// конфигурируем ноги ввода вывода
  set_pin_directions();
 // run_full_speed=0;
+ stop_adc=0;		//АЦП не останавливали
+ temperature=0;		//преобразование температуры выключено
  current_speed=0;
  switch_speed_timer=0;
  mode_timer=0;
@@ -438,6 +444,7 @@ int i;
     while((adc_rcv_fifo_start& (ADC_FIFO_RCV_LEN-1))!=(adc_rcv_fifo_end& (ADC_FIFO_RCV_LEN-1))){ //обязательно написать оценку переполнения
      if (work_with_adc_put()==0) break;
      }
+    if (send_correction_temperature>100) put_packet_type1A();
     #ifdef CABLE
      P1OUT &= ~0x01;                     // Reset P1.0 LED off
     #endif

@@ -1,5 +1,5 @@
 
-// $Id: adc_s.c,v 1.9 2003-10-17 14:33:54 peter Exp $
+// $Id: adc_s.c,v 1.10 2003-11-03 17:01:48 peter Exp $
 #include  <msp430x14x.h>
 #include "global.h"
 
@@ -20,7 +20,7 @@ extern u16 jitter_pusk;
 
 extern u16 stop_transmit;
 extern u16 analog_on;
-
+extern u16 temperature;
 
 //unsigned int results0[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
 //unsigned int results1[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
@@ -80,6 +80,33 @@ HOLD_TIME_IRQ()
 //   else jitter_adc=jitter_adc-jitter_pusk;
 //  if (jitter_adc_max<jitter_adc) jitter_adc_max=jitter_adc;
 
+ if (temperature==1){
+    sum=ADC12MEM0;
+    sum+=ADC12MEM1;
+    sum+=ADC12MEM2;
+    sum+=ADC12MEM3;
+    sum+=ADC12MEM4;
+    sum+=ADC12MEM5;
+    sum+=ADC12MEM6;
+    sum+=ADC12MEM7;
+    sum+=ADC12MEM8;
+    sum+=ADC12MEM9;
+    sum+=ADC12MEM10;
+    sum+=ADC12MEM11;
+    sum+=ADC12MEM12;
+    sum+=ADC12MEM13;
+    sum+=ADC12MEM14;
+    sum+=ADC12MEM15;
+   sh=(adc_rcv_fifo_end & (ADC_FIFO_RCV_LEN-1));
+   multi_count0[0][sh]=sum;
+   results[sh]=0x4000;
+   if (stop_transmit==0)
+    adc_rcv_fifo_end++;
+   ADC12CTL0 |= ADC12SC;                 // Start conversion
+   _BIC_SR_IRQ(CPUOFF);               // Clear LPM0, SET BREAKPOINT HERE
+   SUM_TIME_IRQ();
+  }
+ else
  if (chanel_convert&0x40){
   sh=(adc_rcv_fifo_end & (ADC_FIFO_RCV_LEN-1));
 
@@ -258,6 +285,13 @@ u16 work_with_adc_put(void){
     }
    }
   else
+  if (results[adc_rcv_fifo_start& (ADC_FIFO_RCV_LEN-1)]&0x4000){
+   if (put_packet_type19(adc_rcv_fifo_start& (ADC_FIFO_RCV_LEN-1))){
+    adc_rcv_fifo_start++;
+    return 1;
+    }
+   }
+  else
   if (put_packet_type7(adc_rcv_fifo_start& (ADC_FIFO_RCV_LEN-1))){
    adc_rcv_fifo_start++;
    return 1;
@@ -269,6 +303,8 @@ u16 work_with_adc_put(void){
 
 void set_adc_temperature(void){
  ADC12CTL0 &= ~ENC;                     // Enable conversions
+
+ ADC12CTL0 = ADC12ON+REFON+MSC+SHT0_15+SHT1_15;    // Turn on ADC12, set sampling time
 
  ADC12MCTL0 = INCH_10+SREF_1;      // ref+=AVcc, channel = A10, end seq.
  ADC12MCTL1 = INCH_10+SREF_1;      // ref+=AVcc, channel = A10, end seq.
@@ -294,6 +330,7 @@ void set_adc_temperature(void){
 void set_adc(int ch){
 
  ADC12CTL0 &= ~ENC;                     // Enable conversions
+ ADC12CTL0 = ADC12ON+REFON+MSC+SHT0_6+SHT1_6;    // Turn on ADC12, set sampling time
  set_dac(dac[ch&((NUM_CHANEL>>1)-1)]); //
  
  if (analog_on){
