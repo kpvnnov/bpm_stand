@@ -26,6 +26,11 @@
 #include  <msp430x14x.h>
 
 
+static unsigned int results[4];         // Needs to be global in this example
+                                        // Otherwise, the compiler removes it
+                                        // because it is not used for anything.
+
+
 //инициализация SPI1
 void init_spi1_master(void){
 
@@ -110,8 +115,8 @@ void init_spi1_master(void){
  UMCTL0=0;
 }
 
-char symbl[4];
-char displ[4];
+int symbl[4];
+int displ[4];
 const char symbols[]={
       	0x3F,	// 0 Описание символа 0           00111111    A
 	0x06,	// 1 Описание символа 1           00000110  F   B
@@ -214,13 +219,14 @@ int counter_timer;
 int refresh_timer;
 int sub_counter_timer;
 
-void make_view_time(time_in to_show){
+void make_view_time_min(time_in to_show){
  struct tm_in decoded;
  local_time(to_show,&decoded);
  symbl[0]=decoded.min % 10;
  symbl[1]=decoded.min / 10;
  symbl[2]=decoded.hour% 10;
  symbl[3]=decoded.hour/ 10;
+ update_diplay();
 }
 void make_view_time_sec(time_in to_show){
  struct tm_in decoded;
@@ -231,16 +237,69 @@ void make_view_time_sec(time_in to_show){
  symbl[3]=decoded.min / 10;
  update_diplay();
 }
+void make_view_time_vol(void){
 
-void redraw_display(void){
-  if (GlobalTime!=time_to_show){
+int res;
+ res=results[0];
+ 
+ symbl[0]=res%10;
+ res/=10;
+ symbl[1]=res%10;
+ res/=10;
+ symbl[2]=res%10;
+ res/=10;
+ symbl[3]=res%10;
+
+// symbl[1]=results[0]%10;
+// results[1]/=10;
+// symbl[2]=results[0]%10;
+// results[2]/=10;
+// symbl[3]=results[0]%10;
+ update_diplay();
+}
+
+void redraw_display_second(int force){
+  if (force || GlobalTime!=time_to_show){
    time_to_show=GlobalTime;
    make_view_time_sec(time_to_show);
    }
 }
+void redraw_display_minutes(int force){
+  if (force || (GlobalTime>>2)!=(time_to_show>>2)){
+   time_to_show=GlobalTime;
+   make_view_time_min(time_to_show);
+   }
+}
+void redraw_display_voltage(int force){
+  if (force || (GlobalTime!=time_to_show)){
+   time_to_show=GlobalTime;
+   make_view_time_vol();
+   }
+}
+
+
+int change_to_mode;
+int mode_display;
 
 void tick_timer(void){
- redraw_display();
+int forcedly=0;
+ if (change_to_mode!=mode_display){
+  forcedly=1;
+  mode_display=change_to_mode;
+  }
+ switch(mode_display){
+  case 0:
+   redraw_display_voltage(forcedly);
+//   redraw_display_second(forcedly);
+   break;
+  case 1:
+   redraw_display_minutes(forcedly);
+   break;
+  case 2:
+   redraw_display_second(forcedly);
+//   redraw_display_voltage(forcedly);
+   break;
+  }
 }
 
 
@@ -457,6 +516,8 @@ void set_pin_directions(void){
   P5SEL = 0x0E;
   P6DIR = 0xFF;                         // All P6.x outputs
   P6OUT = 0;                            // All P6.x reset
+  P6SEL = 0x0F;                         // Enable A/D channel inputs
+
 }
 //если не 0, то запускаемя на полной скорости
 int run_full_speed;
@@ -491,6 +552,19 @@ void switch_xt2(void){
 switch_speed_timer=1;
 }
 
+void init_adc(void){
+  ADC12CTL0 = ADC12ON+MSC+SHT0_2;       // Turn on ADC12, set sampling time
+  ADC12CTL1 = SHP+CONSEQ_1;             // Use sampling timer, single sequence
+  ADC12MCTL0 = INCH_0;                  // ref+=AVcc, channel = A0
+  ADC12MCTL1 = INCH_1;                  // ref+=AVcc, channel = A1
+  ADC12MCTL2 = INCH_2;                  // ref+=AVcc, channel = A2    
+  ADC12MCTL3 = INCH_3+EOS;              // ref+=AVcc, channel = A3, end seq.
+  ADC12IE = 0x08;                       // Enable ADC12IFG.3
+  ADC12CTL0 |= ENC;                     // Enable conversions
+}
+
+int end_adc_conversion;
+long time_to_change;
 void main(void)
 { 
 	// останавливаем watchdog
@@ -501,6 +575,10 @@ void main(void)
  current_speed=0;
  current_timer=0;
  switch_speed_timer=0;
+ end_adc_conversion=1;
+ change_to_mode=0;
+ mode_display=0;
+ time_to_change=0;
  invert=0;
 	//переходим на работу от часового кварца
  run_LFXT1CLK(0x02);
@@ -508,7 +586,7 @@ void main(void)
 
 //запускаем таймер A и часы от него
  init_timer_a();
-
+ init_adc();
 
   _EINT();                              // Enable interrupts
   
@@ -518,10 +596,21 @@ void main(void)
     _BIS_SR(CPUOFF);                 // входим в режим спячки
     P1OUT |= 0x01;                      // Set P1.0 LED on
     tick_timer();
-    P1OUT &= ~0x01;                     // Reset P1.0 LED off
     if (current_speed==0 && run_full_speed && run_xt2()){
      switch_xt2();
      }
+    if (current_speed && end_adc_conversion){
+     end_adc_conversion=0;
+     ADC12CTL0 |= ADC12SC;                 // Start conversion
+//     if ((time_to_change+10)<GlobalTime){
+//      if (change_to_mode>=3) 
+//       change_to_mode=0; 
+//      else 
+//       change_to_mode++;
+//      time_to_change=GlobalTime;
+//      }
+     }
+    P1OUT &= ~0x01;                     // Reset P1.0 LED off
   }
 
 }
@@ -545,7 +634,7 @@ interrupt[TIMERA0_VECTOR] void timer_a_0 (void)
    GlobalTime++;
    sub_counter_timer-=1400;
    }
-
+  
   }
  else{
   	//счет таймера от ACLK
@@ -577,3 +666,14 @@ interrupt[WDT_VECTOR] void wd_int (void)
   counter_timer-=4;
   }
 } 
+
+
+interrupt[ADC_VECTOR] void ADC12ISR (void)
+{
+  results[0] = ADC12MEM0;               // Move results, IFG is cleared
+  results[1] = ADC12MEM1;               // Move results, IFG is cleared
+  results[2] = ADC12MEM2;               // Move results, IFG is cleared    
+  results[3] = ADC12MEM3;               // Move results, IFG is cleared  
+  end_adc_conversion=1;
+  _BIC_SR_IRQ(CPUOFF);               // Clear LPM0, SET BREAKPOINT HERE
+}
