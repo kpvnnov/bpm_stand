@@ -1,4 +1,4 @@
-// $Id: uart.c,v 1.18 2003-06-02 19:58:54 peter Exp $
+// $Id: uart.c,v 1.19 2003-06-06 13:34:58 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -41,15 +41,18 @@ u16 current_rec_packet;
 u16 rec_length;
 u16 received_packed;
 
-extern unsigned int results0[ADC_FIFO_RCV_LEN];
-extern unsigned int results1[ADC_FIFO_RCV_LEN];
-extern unsigned int results2[ADC_FIFO_RCV_LEN];
-extern unsigned int results3[ADC_FIFO_RCV_LEN];
-extern unsigned int results4[ADC_FIFO_RCV_LEN];
-extern unsigned int results5[ADC_FIFO_RCV_LEN];
-extern unsigned int results6[ADC_FIFO_RCV_LEN];
-extern unsigned int results7[ADC_FIFO_RCV_LEN];
-extern unsigned int results8[ADC_FIFO_RCV_LEN];
+extern unsigned int results0[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+extern unsigned int results1[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+extern unsigned int results2[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+extern unsigned int results3[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+//extern unsigned int results4[ADC_FIFO_RCV_LEN];
+//extern unsigned int results5[ADC_FIFO_RCV_LEN];
+//extern unsigned int results6[ADC_FIFO_RCV_LEN];
+//extern unsigned int results7[ADC_FIFO_RCV_LEN];
+//extern unsigned int results8[ADC_FIFO_RCV_LEN];
+extern unsigned int results[ADC_FIFO_RCV_LEN];
+extern u16 dac[NUM_CHANEL];
+extern u16 chanel;
 
 
 /*
@@ -77,6 +80,17 @@ _____
           пакет не требует подтверждения и идет без порядкового номера
 0x03      пакет данных ЭКГ
 0x05      пакет данных статистики
+0x06      пакет данных статистики
+0x07      пакет данных с двух каналов
+0x08      пакет данных установки канала и АЦП
+    два байта - значение для ЦАП
+    байт      - номер канала ЦАП
+    байт      - номер канала для преобразования
+                в котором - SxMA AMMM
+                S - 0 - основной, 1 - резервный
+                x - зарезервировано
+                A - значение канала АЦП (PRESS_1 - PRESS_4)
+                M - значение для MUX (A0-A3)
 */
 
 
@@ -85,10 +99,15 @@ _____
 #define  LENPACKET	3	//смещение (с конца) положения в пакете длины пакета
 #define  TYPEPACKET     4	//смещение (с конца) положения в пакете типа пакета
 #define  NUMPACKET	5	//смещение (с конца) положения в пакете номера пакета
+#define  CHANNEL_TO_SET 6       //значение номера канала АЦП в 8-ом пакете
+#define  NUM_OF_CHANNEL_DAC 7   //значение номера канала ЦАП в 8-ом пакете
+#define  VALVE_OF_CHANNEL_DAC 9 //значение для ЦАП в 8-ом пакете
+
 
 #define  DATA3PACKET    24	//смещение (с конца) положения в пакете размещения данных
-#define  DATA5PACKET     24
-#define  DATA6PACKET     20
+#define  DATA5PACKET     (SIZE_STAT*2+6)
+#define  DATA6PACKET     (SIZE_STAT1*2+6)
+#define  DATA7PACKET     (32+6)
 
 
 
@@ -190,361 +209,12 @@ for (c=0;c<len;c++)
 return crc;
 }
 
-u8 put_packet_type3(u16 info){
-int n;
-int crc;
-int shift_fifo;
-u16* t_p;
-//u8* t_r;
-	//захватываем свободный пакет
- disable_int_no_interrupt();
- n=hold_packet();
- enable_int_no_interrupt();
- if (n==MAXQUE) {
-  #ifdef DEBUG_SERIAL
-  packet_fifo_full++;
-  #endif //DEBUG_SERIAL
-  return 0; //свободных пакетов нет
-  }
- #ifdef DEBUG_SERIAL
- packet_in_fifo++;
- if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
- #endif //DEBUG_SERIAL
- shift_fifo=(n+1)*MAXPACKETLEN;
-	//копируем туда данные для пакета
- t_p=(u16*)&packets[shift_fifo-DATA3PACKET];
-
- *t_p++=results0[info];
- *t_p++=results1[info];
- *t_p++=results2[info];
- *t_p++=results3[info];
- *t_p++=results4[info];
- *t_p++=results5[info];
- *t_p++=results6[info];
- *t_p++=results7[info];
- *t_p++=results8[info];
 
 
-	//помещаем в пакет его длину (без завершающего EOFPACKET)
- packets[shift_fifo-LENPACKET]=DATA3PACKET;
-	//помещаем (и увеличиваем) порядковый номер пакета
- packets[shift_fifo-NUMPACKET]=counts_packet;
- queue[n].numeric=counts_packet++;
-	//указываем тип пакета
- packets[shift_fifo-TYPEPACKET]=0x03;
-	//подсчитываем и помещаем CRC пакета
- crc=crc16(&packets[shift_fifo-DATA3PACKET],DATA3PACKET-2);
- packets[shift_fifo-CRCPACKET]=crc>>8;
- packets[shift_fifo-CRCPACKET+1]=crc;
-
-	//в справочном массиве указываем длину пакета
- queue[n].len=DATA3PACKET;
- queue[n].busy=NOTSENDED;
-return 1;
-}
-//отправляем пакет со статистикой
-u16 put_packet_type5(void){
-int n;
-//int x;
-int crc;
-int shift_fifo;
-//u16* t_p;
-//u16* t_s;
-	//захватываем свободный пакет
- disable_int_no_interrupt();
- n=hold_packet();
- enable_int_no_interrupt();
- if (n==MAXQUE) {
-  #ifdef DEBUG_SERIAL
-  packet_fifo_full++;
-  #endif //DEBUG_SERIAL
-  return 0; //свободных пакетов нет
-  }
- #ifdef DEBUG_SERIAL
- packet_in_fifo++;
- if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
- #endif //DEBUG_SERIAL
- shift_fifo=(n+1)*MAXPACKETLEN;
-	//копируем туда данные для пакета
-// t_p=(u16*)&packets[shift_fifo-DATA5PACKET];
-// t_s=(u16*)&stat_buf[(stat_rcv_fifo_start & (STAT_FIFO_RCV_LEN-1))*SIZE_STAT];
-
-// for(x=0;x<SIZE_STAT;x++)
-//  *t_p++=*t_s++;
-  memcpy(&packets[shift_fifo-DATA5PACKET],&stat_buf[(stat_rcv_fifo_start & (STAT_FIFO_RCV_LEN-1))*SIZE_STAT],SIZE_STAT*2);
-
-
- stat_rcv_fifo_start++;
-
-
-	//помещаем в пакет его длину (без завершающего EOFPACKET)
- packets[shift_fifo-LENPACKET]=DATA5PACKET;
-	//помещаем (и увеличиваем) порядковый номер пакета
- packets[shift_fifo-NUMPACKET]=counts_packet;
- queue[n].numeric=counts_packet++;
-	//указываем тип пакета
- packets[shift_fifo-TYPEPACKET]=0x05;
-	//подсчитываем и помещаем CRC пакета
- crc=crc16(&packets[shift_fifo-DATA5PACKET],DATA5PACKET-2);
- packets[shift_fifo-CRCPACKET]=crc>>8;
- packets[shift_fifo-CRCPACKET+1]=crc;
-
-	//в справочном массиве указываем длину пакета
- queue[n].len=DATA5PACKET;
- queue[n].busy=NOTSENDED;
-return 1;
-}
-u16 put_packet_type6(void){
-int n;
-//int x;
-int crc;
-int shift_fifo;
-	//захватываем свободный пакет
- disable_int_no_interrupt();
- n=hold_packet();
- enable_int_no_interrupt();
- if (n==MAXQUE) {
-  #ifdef DEBUG_SERIAL
-  packet_fifo_full++;
-  #endif //DEBUG_SERIAL
-  return 0; //свободных пакетов нет
-  }
- #ifdef DEBUG_SERIAL
- packet_in_fifo++;
- if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
- #endif //DEBUG_SERIAL
- shift_fifo=(n+1)*MAXPACKETLEN;
-	//копируем туда данные для пакета
- memcpy(&packets[shift_fifo-DATA6PACKET],&stat1_buf[(stat1_rcv_fifo_start & (STAT1_FIFO_RCV_LEN-1))*SIZE_STAT1],SIZE_STAT1*2);
-
-
- stat1_rcv_fifo_start++;
-
-
-	//помещаем в пакет его длину (без завершающего EOFPACKET)
- packets[shift_fifo-LENPACKET]=DATA6PACKET;
-	//помещаем (и увеличиваем) порядковый номер пакета
- packets[shift_fifo-NUMPACKET]=counts_packet;
- queue[n].numeric=counts_packet++;
-	//указываем тип пакета
- packets[shift_fifo-TYPEPACKET]=0x06;
-	//подсчитываем и помещаем CRC пакета
- crc=crc16(&packets[shift_fifo-DATA6PACKET],DATA6PACKET-2);
- packets[shift_fifo-CRCPACKET]=crc>>8;
- packets[shift_fifo-CRCPACKET+1]=crc;
-
-	//в справочном массиве указываем длину пакета
- queue[n].len=DATA6PACKET;
- queue[n].busy=NOTSENDED;
-return 1;
-}
-u8 put_packet_type4(void){
-int n;
-int crc;
-int shift_fifo;
-	//захватываем свободный пакет
- disable_int_no_interrupt();
- n=hold_packet();
- enable_int_no_interrupt();
- if (n==MAXQUE) {
-  #ifdef DEBUG_SERIAL
-  packet_fifo_full++;
-  #endif //DEBUG_SERIAL
-  return 0; //свободных пакетов нет
-  }
- #ifdef DEBUG_SERIAL
- packet_in_fifo++;
- if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
- #endif //DEBUG_SERIAL
-
- shift_fifo=(n+1)*MAXPACKETLEN;
- packets[shift_fifo-11]='0';
- packets[shift_fifo-10]='9';
- packets[shift_fifo-9]='8';
- packets[shift_fifo-8]='7';
- packets[shift_fifo-7]='6';
- packets[shift_fifo-6]='5';
- packets[shift_fifo-5]='4';
- packets[shift_fifo-4]='3';
- packets[shift_fifo-3]='2';
- packets[shift_fifo-TYPEPACKET]=0x04;
- crc=crc16(&packets[shift_fifo-13],11);
- packets[shift_fifo-CRCPACKET]=crc>>8;
- packets[shift_fifo-CRCPACKET+1]=crc;
- queue[n].len=13;
- queue[n].busy=NOTSENDED;
-return 1;
-}
-
-void work_with_serial_rec(void){
-int x;
-int crc;
-u16 shift_fifo;
- for (x=0;x<MAXQUE;x++){
-  if (queue[x].busy==PACKREC){
-   received_packed--;
-   //подсчитать CRC
-   shift_fifo=x*MAXPACKETLEN+queue[x].len;
-   if (crc16(&packets[x*MAXPACKETLEN],queue[x].len)==0){ //сrc совпала?
-    switch(packets[shift_fifo-TYPEPACKET]){
-     case 0x07:
-      break;
-     }
-    //отправить подтверждение
-    shift_fifo=(x+1)*MAXPACKETLEN;
-   	//помещаем порядковый номер пакета для подтверждения
-    packets[shift_fifo-NUMPACKET]=packets[x*MAXPACKETLEN+queue[x].len-NUMPACKET];
-    packets[shift_fifo-LENPACKET]=NUMPACKET;	//длина подтверждающего пакета
-   	//указываем тип пакета
-    packets[shift_fifo-TYPEPACKET]=0x01;		//подтверждающий пакет
-   	//подсчитываем и помещаем CRC пакета
-    crc=crc16(&packets[shift_fifo-NUMPACKET],NUMPACKET-2);
-    packets[shift_fifo-CRCPACKET]=crc>>8;
-    packets[shift_fifo-CRCPACKET+1]=crc;
-  
-   	//в справочном массиве указываем длину пакета
-    queue[x].len=NUMPACKET;
-    #ifdef DEBUG_SERIAL
-    packet_in_fifo++;
-    if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
-    #endif //DEBUG_SERIAL
-    queue[x].busy=NOTSENDED;
-    }
-   else{
-    queue[x].busy=FREEPLACE;
-    }
-   }
-  }
-}
 
 
 //u8 test[4]={'0','1','2','3'};
 u16 last_sended_packet;
-void work_with_serial(void){
-int x;
- for (x=0;x<MAXQUE;x++){
-  if (last_sended_packet<MAXQUE) break;
-  switch(queue[x].busy){
-   case NOTSENDED:
-    last_sended_packet=x;
-    break;
-   }//hctiws
-  }//rof
- if (last_sended_packet<MAXQUE){
-  x=last_sended_packet;
-	//посылаем (сколько в фифошку поместится) пакет
-  #ifdef DEBUG_SERIAL
-  length_sended_2_fifo=queue[x].len;
-  #endif //DEBUG_SERIAL
-  queue[x].len=send_serial_massiv(&packets[(x+1)*MAXPACKETLEN-queue[x].len],queue[x].len);
-  #ifdef DEBUG_SERIAL
-  length_sended_2_fifo-=queue[x].len;
-  if (length_sended_2_fifo_max<length_sended_2_fifo)
-   length_sended_2_fifo_max=length_sended_2_fifo;
-  if (length_sended_2_fifo_min>length_sended_2_fifo)
-   length_sended_2_fifo_min=length_sended_2_fifo;
-  //здесь необходимо поместить эти данные в fifo статистики
-  #endif //DEBUG_SERIAL
-
-	//если все отправили
-  if (queue[x].len==0){
-	//высылаем маркер конца пакета
-   while (write_asp_trn_fifo(EOFPACKET)==0) ;
-	//помечаем пакет отмеченным или ожидающем подтверждения
-   //отладка   queue[x].busy=WAIT_ACK;
-
-   //для отладки
-   queue[x].busy=FREEPLACE; 	
-   #ifdef DEBUG_SERIAL
-   packet_in_fifo--;
-   #endif //DEBUG_SERIAL
-   //для отладки
-
-	//ищем следующий пакет в очереди на отправку
-   while((++last_sended_packet)<MAXQUE){
-    switch(queue[last_sended_packet].busy){
-	//найден неотправленный пакет
-     case NOTSENDED:
-      return;
-     }
-    }//elihw дошли до конца очереди - пакетов на отправку нет
-   }//fi - текущий пакет отправлен еще не до конца
-  }//fi - пока нет пакетов для отправки
-}
-
-
-//инициализация serial port 0
-void init_uart0(void){
-
-}
-//инициализация serial port 1
-void init_uart(void){
-int x;
-
-#ifdef CABLE
-  UCTL1 = CHAR;                         // 8-bit character
-  UTCTL1 = SSEL1;                       // UCLK = SMCLK
-//  UBR01 = 0x45;                         // 8Mhz/115200 - 69.44
-//  UBR11 = 0x00;                         //
-//  UMCTL1 = 0x2C;                        // modulation
-
-  UBR01 = 0x80;                         //7.372.800/19200 = 384 (0x180)
-  UBR11 = 0x01;                         //
-  UMCTL1 = 0x00;                        // no modulation
-
-  UBR01 = 0x40;                         //7.372.800/115200 = 64 (0x40)
-  UBR11 = 0x00;                         //
-  UMCTL1 = 0x00;                        // no modulation
-
-//  UBR01 = 0xC0;                         //7.372.800/38400 = 192 (0xC0)
-//  UBR11 = 0x00;                         //
-//  UMCTL1 = 0x00;                        // no modulation
-
-  ME2 |= UTXE1 + URXE1;                 // Enable USART1 TXD/RXD
-  IE2 |= URXIE1;			// Enable USART1 RX+TX interrupt
-//+ UTXIE1;                
-  for (x=0;x<MAXQUE;x++) queue[x].busy=FREEPLACE;
-  last_sended_packet=MAXQUE;
- #ifdef DEBUG_SERIAL
-  fifo_trn_depth_max=0;
-  fifo_trn_depth=0;
-  packet_in_fifo=0;
-  packet_fifo_full=0;
- #endif
-#endif //CABLE
-#ifdef STEND
-
-  UCTL0 = CHAR;                         // 8-bit character
-  UTCTL0 = SSEL1;                       // UCLK = SMCLK
-//  UBR00 = 0x45;                         // 8Mhz/115200 - 69.44
-//  UBR10 = 0x00;                         //
-//  UMCTL0 = 0x2C;                        // modulation
-
-//  UBR00 = 0x80;                         //7.372.800/19200 = 384 (0x180)
-//  UBR10 = 0x01;                         //
-//  UMCTL0 = 0x00;                        // no modulation
-
-  UBR00 = 0x40;                         //7.372.800/115200 = 64 (0x40)
-  UBR10 = 0x00;                         //
-  UMCTL0 = 0x00;                        // no modulation
-
-  ME1 |= UTXE0 + URXE0;                 // Enable USART1 TXD/RXD
-  IE1 |= URXIE0;			// Enable USART1 RX+TX interrupt
-//+ UTXIE0;                
-  for (x=0;x<MAXQUE;x++) queue[x].busy=FREEPLACE;
-  last_sended_packet=MAXQUE;
-  current_rec_packet=0;
-  rec_length=0;
-  queue[0].busy=PACKBUSY;
- #ifdef DEBUG_SERIAL
-  fifo_trn_depth_max=0;
-  fifo_trn_depth=0;
-  packet_in_fifo=0;
-  packet_fifo_full=0;
- #endif
-  received_packed=0;
-#endif //STEND
-}
 
 
 
@@ -561,7 +231,9 @@ interrupt[UART1TX_VECTOR] void usart1_tx (void)
 {
 #endif //CABLE
 
+#ifdef CABLE
 int temp_led;
+#endif
 HOLD_TIME_IRQ()
  #ifdef CABLE
   temp_led=P1OUT;
@@ -651,7 +323,7 @@ HOLD_TIME_IRQ()
    else{
     packets[shift_fifo++]=received_sym;
     rec_length++;
-    if (shift_fifo>=MAXPACKETLEN){ //переполнение приема (нет EOF)
+    if (rec_length>=MAXPACKETLEN){ //переполнение приема (нет EOF)
      rec_length=0;
      }
     }
@@ -663,11 +335,6 @@ HOLD_TIME_IRQ()
 
 
 }
-//чтение буфера приема
-//u16 read_asp_rcv_fifo(void){ 
-// if (asp_rcv_fifo_start==asp_rcv_fifo_end) return 0;
-// return (asp_rcv_fifo_buf[asp_rcv_fifo_start++ & (SERIAL_FIFO_RCV_LEN-1)]|0x0100);
-//}
 
 u16 escape_sym;
 u16 send_serial_massiv(u8* data,u16 len){
@@ -757,3 +424,54 @@ u8 write_asp_trn_fifo(u8 data_wr){
  return 1;
 }
 
+void work_with_serial(void){
+int x;
+ for (x=0;x<MAXQUE;x++){
+  if (last_sended_packet<MAXQUE) break;
+  switch(queue[x].busy){
+   case NOTSENDED:
+    last_sended_packet=x;
+    break;
+   }//hctiws
+  }//rof
+ if (last_sended_packet<MAXQUE){
+  x=last_sended_packet;
+	//посылаем (сколько в фифошку поместится) пакет
+  #ifdef DEBUG_SERIAL
+  length_sended_2_fifo=queue[x].len;
+  #endif //DEBUG_SERIAL
+  queue[x].len=send_serial_massiv(&packets[(x+1)*MAXPACKETLEN-queue[x].len],queue[x].len);
+  #ifdef DEBUG_SERIAL
+  length_sended_2_fifo-=queue[x].len;
+  if (length_sended_2_fifo_max<length_sended_2_fifo)
+   length_sended_2_fifo_max=length_sended_2_fifo;
+  if (length_sended_2_fifo_min>length_sended_2_fifo)
+   length_sended_2_fifo_min=length_sended_2_fifo;
+  //здесь необходимо поместить эти данные в fifo статистики
+  #endif //DEBUG_SERIAL
+
+	//если все отправили
+  if (queue[x].len==0){
+	//высылаем маркер конца пакета
+   while (write_asp_trn_fifo(EOFPACKET)==0) ;
+	//помечаем пакет отмеченным или ожидающем подтверждения
+   //отладка   queue[x].busy=WAIT_ACK;
+
+   //для отладки
+   queue[x].busy=FREEPLACE; 	
+   #ifdef DEBUG_SERIAL
+   packet_in_fifo--;
+   #endif //DEBUG_SERIAL
+   //для отладки
+
+	//ищем следующий пакет в очереди на отправку
+   while((++last_sended_packet)<MAXQUE){
+    switch(queue[last_sended_packet].busy){
+	//найден неотправленный пакет
+     case NOTSENDED:
+      return;
+     }
+    }//elihw дошли до конца очереди - пакетов на отправку нет
+   }//fi - текущий пакет отправлен еще не до конца
+  }//fi - пока нет пакетов для отправки
+}

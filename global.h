@@ -1,4 +1,4 @@
-//$Id: global.h,v 1.16 2003-06-03 16:50:21 peter Exp $
+//$Id: global.h,v 1.17 2003-06-06 13:34:58 peter Exp $
 
 
 #define DEBUG_SERIAL
@@ -50,7 +50,10 @@ void tick_timer(void);
 
 // АЦП
 void init_adc(void);	//инициализация АЦП
-#define  ADC_FIFO_RCV_LEN  16           /* size of fifo ADC buffer   */
+#define  ADC_FIFO_RCV_LEN  8           /* size of fifo ADC buffer   */
+#define  SIZE_OF_ADC_DUMP  8
+#define  NUM_CHANEL 32
+void set_dac(u16 d);
 
 //индикатор
 void show_display(void);
@@ -70,10 +73,13 @@ u8 put_packet_type3(u16 info);
 u8 put_packet_type4(void);
 u16 put_packet_type5(void);
 u16 put_packet_type6(void);
+u8 put_packet_type7(u16 info);
+
 u8 write_asp_trn_fifo(u8 data_wr);
 void init_uart(void);
 void update_diplay(void);
 void work_with_serial_rec(void);
+int hold_packet(void);
 
 
 
@@ -99,7 +105,7 @@ void work_with_serial_rec(void);
 //суммируем время спячки, перезаряжаем timer_hold
 //иначе суммируем время работы, перезаряжаем timer_hold
 //это должно вызываться в начале прерывания
-#define HOLD_TIME_IRQ()  temp_hold=TAR-3; \
+#define HOLD_TIME_IRQ()  temp_hold=TAR-2; \
                          if (sleep) {timer_sum_sleep+=temp_hold-timer_hold;} \
                          else { \
                           switch(why_job){ \

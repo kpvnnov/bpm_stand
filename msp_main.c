@@ -1,5 +1,5 @@
 //********************************************************
-// $Id: msp_main.c,v 1.21 2003-06-02 19:58:54 peter Exp $
+// $Id: msp_main.c,v 1.22 2003-06-06 13:34:58 peter Exp $
 //********************************************************
 
 //#include <msp430x11x1.h>
@@ -227,7 +227,7 @@ void set_pin_directions(void){
   P1DIR = BIT0+BIT1+BIT5+BIT6+BIT7;
   P1OUT = 0;                            // All P1.x reset
 
-  P2DIR = BIT1+BIT3+BIT4+BIT5+BIT6+BIT7;
+  P2DIR = BIT0+BIT1+BIT3+BIT4+BIT5+BIT6+BIT7;
   P2OUT = 0;                            // All P2.x reset
 
   P3SEL |= BIT4+BIT5;	//USART0 select
