@@ -1,4 +1,4 @@
-// $Id: uart_s.c,v 1.1 2003-06-06 13:34:58 peter Exp $
+// $Id: uart_s.c,v 1.2 2003-06-09 20:09:18 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -82,15 +82,30 @@ _____
 0x05      пакет данных статистики
 0x06      пакет данных статистики
 0x07      пакет данных с двух каналов
-0x08      пакет данных установки канала и АЦП
+0x08      пакет данных установки канала ЦАП
     два байта - значение для ЦАП
     байт      - номер канала ЦАП
+0x09      пакет данных установки канала АЦП
     байт      - номер канала для преобразования
-                в котором - SxMA AMMM
+                в котором - SXMA AMMM
                 S - 0 - основной, 1 - резервный
-                x - зарезервировано
+                X -  0 - режим вывода всех отсчетов опорного и 
+                         исследуемого канала (пакет 0x07)
+                     1 - режим вывода суммарных значений
                 A - значение канала АЦП (PRESS_1 - PRESS_4)
                 M - значение для MUX (A0-A3)
+0x0A      пакет данных с каналов (просуммированные)
+    байт - количество выводимых каналов (N)
+    байт - номер первого канала
+    слово - значение опорного канала со смещением 0
+    слово - значение исследуемого канала со смещением 0
+    слово - значение опорного канала со смещением 1
+    слово - значение исследуемого канала со смещением 1
+    .....
+    слово - значение опорного канала со смещением (N-1)
+    слово - значение исследуемого канала со смещением (N-1)
+
+
 */
 
 
@@ -99,16 +114,16 @@ _____
 #define  LENPACKET	3	//смещение (с конца) положения в пакете длины пакета
 #define  TYPEPACKET     4	//смещение (с конца) положения в пакете типа пакета
 #define  NUMPACKET	5	//смещение (с конца) положения в пакете номера пакета
-#define  CHANNEL_TO_SET 6       //значение номера канала АЦП в 8-ом пакете
-#define  NUM_OF_CHANNEL_DAC 7   //значение номера канала ЦАП в 8-ом пакете
-#define  VALVE_OF_CHANNEL_DAC 9 //значение для ЦАП в 8-ом пакете
+#define  CHANNEL_TO_SET 6       //значение номера канала АЦП в 9-ом пакете
+#define  NUM_OF_CHANNEL_DAC 6   //значение номера канала ЦАП в 8-ом пакете
+#define  VALVE_OF_CHANNEL_DAC 8 //значение для ЦАП в 8-ом пакете
 
 
 #define  DATA3PACKET    24	//смещение (с конца) положения в пакете размещения данных
 #define  DATA5PACKET     (SIZE_STAT*2+6)
 #define  DATA6PACKET     (SIZE_STAT1*2+6)
 #define  DATA7PACKET     (32+6)
-
+#define  DATAxAPACKET    (2+2*2+6)
 
 
 #define  ESCAPE		0x7D
@@ -361,7 +376,7 @@ u16* t_p;
 
  memcpy(t_p,&results0[info*SIZE_OF_ADC_DUMP],SIZE_OF_ADC_DUMP*2);
  memcpy(t_p+SIZE_OF_ADC_DUMP,&results1[info*SIZE_OF_ADC_DUMP],SIZE_OF_ADC_DUMP*2);
- packets[shift_fifo-DATA7PACKET+2*SIZE_OF_ADC_DUMP]=results[info];
+ packets[shift_fifo-DATA7PACKET+4*SIZE_OF_ADC_DUMP]=results[info];
 
 	//помещаем в пакет его длину (без завершающего EOFPACKET)
  packets[shift_fifo-LENPACKET]=DATA7PACKET;
@@ -380,6 +395,52 @@ u16* t_p;
  queue[n].busy=NOTSENDED;
 return 1;
 }
+u8 put_packet_typeA(u16 info){
+int n;
+int crc;
+int shift_fifo;
+u16* t_p;
+	//захватываем свободный пакет
+ disable_int_no_interrupt();
+ n=hold_packet();
+ enable_int_no_interrupt();
+ if (n==MAXQUE) {
+  #ifdef DEBUG_SERIAL
+  packet_fifo_full++;
+  #endif //DEBUG_SERIAL
+  return 0; //свободных пакетов нет
+  }
+ #ifdef DEBUG_SERIAL
+ packet_in_fifo++;
+ if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
+ #endif //DEBUG_SERIAL
+ shift_fifo=(n+1)*MAXPACKETLEN;
+	//копируем туда данные для пакета
+ t_p=(u16*)&packets[shift_fifo-DATAxAPACKET];
+
+ *t_p++=(results[info]&0xFF)|2;	//пока два выводимых канала
+ *t_p++=results0[info];
+ *t_p++=results1[info];
+ *t_p++=results2[info];
+ *t_p++=results3[info];
+
+	//помещаем в пакет его длину (без завершающего EOFPACKET)
+ packets[shift_fifo-LENPACKET]=DATAxAPACKET;
+	//помещаем (и увеличиваем) порядковый номер пакета
+ packets[shift_fifo-NUMPACKET]=counts_packet;
+ queue[n].numeric=counts_packet++;
+	//указываем тип пакета
+ packets[shift_fifo-TYPEPACKET]=0x0A;
+	//подсчитываем и помещаем CRC пакета
+ crc=crc16(&packets[shift_fifo-DATAxAPACKET],DATAxAPACKET-2);
+ packets[shift_fifo-CRCPACKET]=crc>>8;
+ packets[shift_fifo-CRCPACKET+1]=crc;
+
+	//в справочном массиве указываем длину пакета
+ queue[n].len=DATAxAPACKET;
+ queue[n].busy=NOTSENDED;
+return 1;
+}
 
 
 
@@ -395,7 +456,9 @@ u16 shift_fifo;
    if (crc16(&packets[x*MAXPACKETLEN],queue[x].len)==0){ //сrc совпала?
     switch(packets[shift_fifo-TYPEPACKET]){
      case 0x08:
-      dac[packets[shift_fifo-NUM_OF_CHANNEL_DAC]&(NUM_CHANEL-1)]=packets[shift_fifo-VALVE_OF_CHANNEL_DAC]+(packets[shift_fifo-VALVE_OF_CHANNEL_DAC+1]<<8);
+      dac[packets[shift_fifo-NUM_OF_CHANNEL_DAC]&((NUM_CHANEL>>1)-1)]=packets[shift_fifo-VALVE_OF_CHANNEL_DAC]+(packets[shift_fifo-VALVE_OF_CHANNEL_DAC+1]<<8);
+      break;
+     case 0x09:
       chanel=packets[shift_fifo-CHANNEL_TO_SET];
       break;
      }

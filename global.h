@@ -1,4 +1,4 @@
-//$Id: global.h,v 1.17 2003-06-06 13:34:58 peter Exp $
+//$Id: global.h,v 1.18 2003-06-09 20:09:18 peter Exp $
 
 
 #define DEBUG_SERIAL
@@ -74,12 +74,14 @@ u8 put_packet_type4(void);
 u16 put_packet_type5(void);
 u16 put_packet_type6(void);
 u8 put_packet_type7(u16 info);
+u8 put_packet_typeA(u16 info);
 
 u8 write_asp_trn_fifo(u8 data_wr);
 void init_uart(void);
 void update_diplay(void);
 void work_with_serial_rec(void);
 int hold_packet(void);
+void set_adc(int ch);
 
 
 

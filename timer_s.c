@@ -1,4 +1,4 @@
-// $Id: timer_s.c,v 1.1 2003-06-06 13:34:58 peter Exp $
+// $Id: timer_s.c,v 1.2 2003-06-09 20:09:18 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -254,6 +254,9 @@ int y;
 
 }
 
+int rotate_channel;
+int first_channel;
+
 interrupt [TIMERA1_VECTOR] void Timer_A(void)
 {
 #ifdef CABLE
@@ -288,85 +291,18 @@ HOLD_TIME_IRQ()
       CCR1 += (18432);
       #endif
       #ifdef STEND
-      CCR1 += (4608);
+      if (chanel_convert&0x40) //"серийное" преобразование каналов
+       CCR1 += (2304);
+      else
+       CCR1 += (4608); //"парное" преобразование опорный+тест
       #endif
-//      ADC12CTL0 |= ADC12SC;                 // Start conversion
       if (end_adc_conversion){
        end_adc_conversion=0;
        if (chanel!=chanel_convert){
         chanel_convert=chanel;
-        ADC12CTL0 &= ~ENC;                     // Enable conversions
-        switch((chanel_convert>>3)&0x03){
-         case 0:
-          ADC12MCTL1 = INCH_6+SREF_2;
-          ADC12MCTL3 = INCH_6+SREF_2;
-          ADC12MCTL5 = INCH_6+SREF_2;
-          ADC12MCTL7 = INCH_6+SREF_2;
-          ADC12MCTL9 = INCH_6+SREF_2;
-          ADC12MCTL11= INCH_6+SREF_2;
-          ADC12MCTL13= INCH_6+SREF_2;
-          ADC12MCTL15= INCH_6+SREF_2+EOS;
-          break;
-         case 1:
-          ADC12MCTL1 = INCH_5+SREF_2;
-          ADC12MCTL3 = INCH_5+SREF_2;
-          ADC12MCTL5 = INCH_5+SREF_2;
-          ADC12MCTL7 = INCH_5+SREF_2;
-          ADC12MCTL9 = INCH_5+SREF_2;
-          ADC12MCTL11= INCH_5+SREF_2;
-          ADC12MCTL13= INCH_5+SREF_2;
-          ADC12MCTL15= INCH_5+SREF_2+EOS;
-          break;
-         case 2:
-          ADC12MCTL1 = INCH_4+SREF_2;
-          ADC12MCTL3 = INCH_4+SREF_2;
-          ADC12MCTL5 = INCH_4+SREF_2;
-          ADC12MCTL7 = INCH_4+SREF_2;
-          ADC12MCTL9 = INCH_4+SREF_2;
-          ADC12MCTL11= INCH_4+SREF_2;
-          ADC12MCTL13= INCH_4+SREF_2;
-          ADC12MCTL15= INCH_4+SREF_2+EOS;
-          break;
-         case 3:
-          ADC12MCTL1 = INCH_3+SREF_2;
-          ADC12MCTL3 = INCH_3+SREF_2;
-          ADC12MCTL5 = INCH_3+SREF_2;
-          ADC12MCTL7 = INCH_3+SREF_2;
-          ADC12MCTL9 = INCH_3+SREF_2;
-          ADC12MCTL11= INCH_3+SREF_2;
-          ADC12MCTL13= INCH_3+SREF_2;
-          ADC12MCTL15= INCH_3+SREF_2+EOS;
-          break;
-         }//свитч
-        if (chanel_convert&0x80){ //резервный канал
-          ADC12MCTL0 = INCH_1+SREF_2;           // ref+=Ve REF,  channel = A0
-          ADC12MCTL2 = INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
-          ADC12MCTL4 = INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
-          ADC12MCTL6 = INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
-          ADC12MCTL8 = INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
-          ADC12MCTL10= INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
-          ADC12MCTL12= INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
-          ADC12MCTL14= INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
-         }
-        else{// основной канал
-          ADC12MCTL0 = INCH_7+SREF_2;           // ref+=Ve REF,  channel = A0
-          ADC12MCTL2 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A1
-          ADC12MCTL4 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A1
-          ADC12MCTL6 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A1
-          ADC12MCTL8 = INCH_7+SREF_2;           // ref+=Ve REF+, channel = A1
-          ADC12MCTL10= INCH_7+SREF_2;           // ref+=Ve REF+, channel = A1
-          ADC12MCTL12= INCH_7+SREF_2;           // ref+=Ve REF+, channel = A1
-          ADC12MCTL14= INCH_7+SREF_2;           // ref+=Ve REF+, channel = A1
-         }
-        P3OUT&=~(BIT0|BIT1|BIT2|BIT3);
-
-        if (chanel_convert&0x01) P3OUT|=BIT0;
-        if (chanel_convert&0x02) P3OUT|=BIT1;
-        if (chanel_convert&0x04) P3OUT|=BIT2;
-        if (chanel_convert&0x20) P3OUT|=BIT3;
-        set_dac(dac[chanel_convert&(NUM_CHANEL-1)]); //
-        ADC12IE = 1<<15;                       // Enable ADC12IFG.3
-        ADC12CTL0 |= ENC;                     // Enable conversions
+        first_channel=chanel_convert;
+        rotate_channel=0;
+        set_adc(chanel_convert);
         }
        ADC12CTL0 |= ADC12SC;                 // Start conversion
        }
@@ -488,7 +424,6 @@ HOLD_TIME_IRQ()
     packet_in_fifo_max=0;
 
     stat1_rcv_fifo_end++;
-    chanel_convert=0xFF;
 
     #ifdef CABLE
      P1OUT = temp_led;                     // return led state

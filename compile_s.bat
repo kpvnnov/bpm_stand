@@ -1,12 +1,4 @@
 @echo off
-iar\bin\icc430.exe -DCABLE -ODebug\Obj\ -e -K -gA -s9 -RCODE -r0 -LDebug\List\ -q -T -t8 -ADebug\List\ -Iiar\inc\ uart.c
-iar\bin\icc430.exe -DCABLE -ODebug\Obj\ -e -K -gA -s9 -RCODE -r0 -LDebug\List\ -q -T -t8 -ADebug\List\ -Iiar\inc\ uart_c.c
-iar\bin\icc430.exe -DCABLE -ODebug\Obj\ -e -K -gA -s9 -RCODE -r0 -LDebug\List\ -q -T -t8 -ADebug\List\ -Iiar\inc\ adc.c
-iar\bin\icc430.exe -DCABLE -ODebug\Obj\ -e -K -gA -s9 -RCODE -r0 -LDebug\List\ -q -T -t8 -ADebug\List\ -Iiar\inc\ adc_c.c
-iar\bin\icc430.exe -DCABLE -ODebug\Obj\ -e -K -gA -s9 -RCODE -r0 -LDebug\List\ -q -T -t8 -ADebug\List\ -Iiar\inc\ msp_main.c
-iar\bin\icc430.exe -DCABLE -ODebug\Obj\ -e -K -gA -s9 -RCODE -r0 -LDebug\List\ -q -T -t8 -ADebug\List\ -Iiar\inc\ timer_a.c
-iar\bin\icc430.exe -DCABLE -ODebug\Obj\ -e -K -gA -s9 -RCODE -r0 -LDebug\List\ -q -T -t8 -ADebug\List\ -Iiar\inc\ timer_c.c
-
 
 iar\bin\icc430.exe -DSTEND -ODebugS\Obj\ -e -K -gA -s9 -RCODE -r0 -LDebugS\List\ -q -T -t8 -ADebug\List\ -Iiar\inc\ uart.c
 iar\bin\icc430.exe -DSTEND -ODebugS\Obj\ -e -K -gA -s9 -RCODE -r0 -LDebugS\List\ -q -T -t8 -ADebug\List\ -Iiar\inc\ uart_s.c
