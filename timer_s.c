@@ -1,4 +1,4 @@
-// $Id: timer_s.c,v 1.11 2004-03-07 21:31:50 peter Exp $
+// $Id: timer_s.c,v 1.12 2004-03-18 16:51:15 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 
@@ -9,6 +9,11 @@
 #ifdef STEND
 #include "uart_s.h"
 #endif // STEND
+
+
+// модуль для работы с пакетами
+#include "uart_p.h"
+
 
 #include "global.h"
 
@@ -92,24 +97,24 @@ extern int volt_to_show;
 extern int capture_timer;
 
 extern int change_to_mode;
-	// 0 - ACLK 1 - SMCLK
+        // 0 - ACLK 1 - SMCLK
 extern int mode_timer;
 extern int counter_timer;
 //int refresh_timer;
 extern int sub_counter_timer;
-	//это время по гринвичу
+        //это время по гринвичу
 extern time_in GlobalTime;
 extern int second_point;
 extern int invert;
-	//если не 0, то запускаемя на полной скорости
+        //если не 0, то запускаемя на полной скорости
 extern int run_full_speed;
-	//переключаемся на скоростной режим таймера
+        //переключаемся на скоростной режим таймера
 extern int switch_speed_timer;
 
 // дисплей
 extern int mode_display;
 extern int update_display;
-	//это время в формате long для показа на индикатор
+        //это время в формате long для показа на индикатор
 extern time_in time_to_show;
 extern int symbl[4];
 extern unsigned int displ[2];
@@ -155,7 +160,7 @@ void init_timer_a(void){
  // 0 1 ACLK Auxiliary clock ACLK is used.
  // 1 0 SMCLK System clock SMCLK.
  // 1 1 INCLK See device description in data sheet.
- 	//очищаем таймер и ставим источником ACLK
+        //очищаем таймер и ставим источником ACLK
         //разрешаем прерывания таймера и делитель на 8
  TACTL=TASSEL0+TACLR+TAIE+ID_3;
 
@@ -236,14 +241,14 @@ void init_timer_a(void){
  // 1 Positive Edge Capture is done with rising edge.
  // 2 Negative Edge Capture is done with falling edge.
  // 3 Both Edges Capture is done with both rising and falling edges.
-// CCTL0=CCIE;	// CCR0 interrupt enabled
-// CCR0=32768/4; 	//8192=0x2000
+// CCTL0=CCIE;  // CCR0 interrupt enabled
+// CCR0=32768/4;        //8192=0x2000
 
  CCTL2|= CCIE;              // interrupt enabled
 
  CCR2=TAR+0x100;
-	// Start Timer_a in Continous upmode
- TACTL|=MC_2    /* Timer A mode control: 2 - Continous up */;	
+        // Start Timer_a in Continous upmode
+ TACTL|=MC_2    /* Timer A mode control: 2 - Continous up */;   
 
 }
 
@@ -317,12 +322,12 @@ HOLD_TIME_IRQ()
      //для1800 Гц необходим делитель   512        
      //для2000 Гц необходим делитель   460,8
      //для2200 Гц необходим делитель   418,9
-     //для2400 Гц необходим делитель   384	- 12 преобразований (11 каналов)
+     //для2400 Гц необходим делитель   384      - 12 преобразований (11 каналов)
      //для2600 Гц необходим делитель   354.46   - 13 преобразований (12 каналов)
      //для2800 Гц необходим делитель   329.14   - 14 преобразований (13 каналов)
-     //для3000 Гц необходим делитель   307.2   	- 15 преобразований (14 каналов)
-     //для3200 Гц необходим делитель   288   	- 16 преобразований (15 каналов)
-     //для3400 Гц необходим делитель   271.06  	- 17 преобразований (16 каналов)
+     //для3000 Гц необходим делитель   307.2    - 15 преобразований (14 каналов)
+     //для3200 Гц необходим делитель   288      - 16 преобразований (15 каналов)
+     //для3400 Гц необходим делитель   271.06   - 17 преобразований (16 каналов)
     switch(mode_timer){                        
      case 0: //(cчет таймера от ACLK)
       //пока ничего не делаем
@@ -422,10 +427,10 @@ HOLD_TIME_IRQ()
       else {
 //       error_adc=1;
         #ifdef CABLE
-//         IE2 &= ~UTXIE1;		
+//         IE2 &= ~UTXIE1;              
         #endif //CABLE
         #ifdef STEND
-//         IE1 &= ~UTXIE0;		
+//         IE1 &= ~UTXIE0;              
         #endif //STEND
        }
       break;
@@ -461,20 +466,20 @@ HOLD_TIME_IRQ()
        switch_speed_timer=0;
        TACTL&=~(MC0|MC1); //stop
        TACTL&=~(TASSEL0+TASSEL1); //обнуляем биты выбора источника
-       TACTL|=TASSEL_2;	//выбираем Timer A clock source select: 2 - SMCLK 
+       TACTL|=TASSEL_2; //выбираем Timer A clock source select: 2 - SMCLK 
        TACCTL1 = OUTMOD_4+CCIE;                   // CCR1 setup
        TACCR1=TAR+0x100;
        ADC12CTL0 |= ENC;                     // Enable conversions
        ADC12CTL0 |= ADC12SC;                 // Start conversion
-       TACTL|=MC_2;	//запускаем Timer A mode control: 2 - Continous up
+       TACTL|=MC_2;     //запускаем Timer A mode control: 2 - Continous up
        }
       break;
      case 1: //(счет таймера от SMCLK)
       CCR2 += 57600;
       break;
      }
-	//сброс WatchDog
-    CLEAR_DOG();	
+        //сброс WatchDog
+    CLEAR_DOG();        
 
     #ifdef DISPLAY
     show_display();
@@ -713,7 +718,7 @@ void init_spi1_master(int regim){
 
 
 
-#define cs_on_display()	 P4OUT|=BIT7
+#define cs_on_display()  P4OUT|=BIT7
 #define cs_off_display() P4OUT&=~BIT7
 
 
@@ -746,31 +751,31 @@ u16 data;
 
 const char symbols[]={
                 //                                 GFEDCBA
-      	0x3F,	// 0 Описание символа 0           00111111    A
-	0x06,	// 1 Описание символа 1           00000110  F   B
-	0x5B,   // 2 Описание символа 2           01011011    G
-	0x4F,   // 3 Описание символа 3           01001111  E   C
-	0x66,   // 4 Описание символа 4           01100110    D
-	0x6D,   // 5 Описание символа 5           01101101
-	0x7D,   // 6 Описание символа 6           01111101
-	0x07,   // 7 Описание символа 7           00000111
-	0x7F,   // 8 Описание символа 8           01111111
-	0x6F,   // 9 Описание символа 9           01101111
-	0x77,   // A Описание символа А           01110111
-	0x7C,   // B Описание символа b           01111100
-	0x39,   // C Описание символа C           00111001
-	0x5E,   // D Описание символа d           01011110
-	0x79,   // E Описание символа E           01111001
-	0x71,   // F Описание символа F           01110001
-	0x00,   //10 Описание символа "Пустота"   00000000
-	0x01,   //11 Описание символа (верх.тире) 00000001
-	0x40,   //12 Описание символа (сред.тире) 01000000
-	0x08,   //13 Описание символа (нижн.тире) 00001000
-	0x73,   //14 Описание символа P           01110011
-	0x38,   //15 Описание символа L           00111000
-	0x37,   //16 Описание символа П           00110111
-	0x6E    //17 Описание символа У           01101110
-	};
+        0x3F,   // 0 Описание символа 0           00111111    A
+        0x06,   // 1 Описание символа 1           00000110  F   B
+        0x5B,   // 2 Описание символа 2           01011011    G
+        0x4F,   // 3 Описание символа 3           01001111  E   C
+        0x66,   // 4 Описание символа 4           01100110    D
+        0x6D,   // 5 Описание символа 5           01101101
+        0x7D,   // 6 Описание символа 6           01111101
+        0x07,   // 7 Описание символа 7           00000111
+        0x7F,   // 8 Описание символа 8           01111111
+        0x6F,   // 9 Описание символа 9           01101111
+        0x77,   // A Описание символа А           01110111
+        0x7C,   // B Описание символа b           01111100
+        0x39,   // C Описание символа C           00111001
+        0x5E,   // D Описание символа d           01011110
+        0x79,   // E Описание символа E           01111001
+        0x71,   // F Описание символа F           01110001
+        0x00,   //10 Описание символа "Пустота"   00000000
+        0x01,   //11 Описание символа (верх.тире) 00000001
+        0x40,   //12 Описание символа (сред.тире) 01000000
+        0x08,   //13 Описание символа (нижн.тире) 00001000
+        0x73,   //14 Описание символа P           01110011
+        0x38,   //15 Описание символа L           00111000
+        0x37,   //16 Описание символа П           00110111
+        0x6E    //17 Описание символа У           01101110
+        };
 
 //преобразует symbl в соответствии с symbols в displ
 void update_diplay(void){

@@ -1,5 +1,5 @@
-//$Id: crc16.c,v 1.1 2004-03-07 21:31:50 peter Exp $
-// вычисление контрольной суммы 
+//$Id: crc16.c,v 1.2 2004-03-18 16:51:14 peter Exp $
+// т√ўшёыхэшх ъюэЄЁюы№эющ ёєьь√ 
 
 const unsigned int  CrcTable16[256]={
     0x0000,  0x1021,  0x2042,  0x3063,  0x4084,  0x50a5,  0x60c6,  0x70e7,
@@ -36,7 +36,7 @@ const unsigned int  CrcTable16[256]={
     0x6e17,  0x7e36,  0x4e55,  0x5e74,  0x2e93,  0x3eb2,  0x0ed1,  0x1ef0};
 
 
-// вычисление контрольной суммы пакета
+// т√ўшёыхэшх ъюэЄЁюы№эющ ёєьь√ яръхЄр
 unsigned int crc16(void* massiv, unsigned int len){
 unsigned int crc=0x0000;
 unsigned int c;

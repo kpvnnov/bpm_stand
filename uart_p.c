@@ -1,10 +1,10 @@
-// $Id: uart_p.c,v 1.2 2004-03-17 11:34:16 peter Exp $
-/* модуль работы с пакетами */
+// $Id: uart_p.c,v 1.3 2004-03-18 16:51:15 peter Exp $
+/* ьюфєы№ ЁрсюЄ√ ё яръхЄрьш */
 
-//типы переменных
+//Єшя√ яхЁхьхээ√ї
 #include "type_def.h"
 
-// заголовочный файл для работы с пакетами
+// чруюыютюўэ√щ Їрщы фы  ЁрсюЄ√ ё яръхЄрьш
 #include "uart_p.h"
 
 #ifdef STEND
@@ -15,7 +15,7 @@
 #include "uart_l.h"
 #endif // LOADER
 
-// "inline" функции для 149 процессора
+// "inline" ЇєэъЎшш фы  149 яЁюЎхёёюЁр
 #include "m149.h"
 #include  <msp430x14x.h>
 
@@ -23,18 +23,18 @@
 #include "crc.h"
 
 
- // служебные данные для пакетов
+ // ёыєцхсэ√х фрээ√х фы  яръхЄют
 struct que queue[MAXQUE];
 
- //данные пакетов
+ //фрээ√х яръхЄют
 u8 packets[MAXQUE*MAXPACKETLEN];
 
- //порядковый номер пакета
+ //яюЁ фъют√щ эюьхЁ яръхЄр
 u8 counts_packet; 
 
 
-// "захват" пакета для работы с ним 
-// должен вызываться с запрещенными прерываниями
+// "чрїтрЄ" яръхЄр фы  ЁрсюЄ√ ё эшь 
+// фюыцхэ т√ч√трЄ№ё  ё чряЁх∙хээ√ьш яЁхЁ√трэш ьш
 u16 hold_packet(void){
 int x;
  for (x=0;x<MAXQUE;x++){
@@ -47,12 +47,12 @@ int x;
 return MAXQUE;
 }
 
-// формирование пакета
-//на выходе 0 - если нет свободных пакетов
-//          x - необходимые данные занесены, номер пакета
-u16 put_packet(void){
+// ЇюЁьшЁютрэшх яръхЄр
+//эр т√їюфх 0 - хёыш эхЄ ётюсюфэ√ї яръхЄют
+//          x - эхюсїюфшь√х фрээ√х чрэхёхэ√, эюьхЁ яръхЄр
+u16 make_packet(void){
 u16 num_packet;
-        //захватываем свободный пакет
+        //чрїтрЄ√трхь ётюсюфэ√щ яръхЄ
  disable_int_no_interrupt();
  num_packet=hold_packet();
  enable_int_no_interrupt();
@@ -60,7 +60,7 @@ u16 num_packet;
   #ifdef DEBUG_SERIAL
   packet_fifo_full++;
   #endif //DEBUG_SERIAL
-  return 0; //свободных пакетов нет
+  return 0; //ётюсюфэ√ї яръхЄют эхЄ
   }
 
  #ifdef DEBUG_SERIAL
@@ -68,7 +68,7 @@ u16 num_packet;
  if (packet_in_fifo_max<packet_in_fifo) packet_in_fifo_max=packet_in_fifo;
  #endif //DEBUG_SERIAL
 
- return num_packet;
+ return num_packet+1;
 
 }
 
@@ -81,25 +81,57 @@ const unsigned int  len_of_packets[]={
         DATA5PACKET,
         DATA6PACKET,
         DATA7PACKET,
-        DATA8PACKET};
+        DATA8PACKET,
+        DATA9PACKET,
+        DATAxAPACKET,
+        DATAxBPACKET,
+        DATAxCPACKET,
+        DATAxDPACKET,
+        DATAxEPACKET,
+        DATAxFPACKET,
+        DATA10PACKET,
+        DATA11PACKET,
+        DATA12PACKET,
+        DATA13PACKET,
+        DATA14PACKET,
+        DATA15PACKET,
+        DATA16PACKET,
+        DATA17PACKET,
+        DATA18PACKET,
+        DATA19PACKET,
+        DATA1APACKET,
+        DATA1BPACKET,
+        DATA1CPACKET,
+        DATA1DPACKET,
+        DATA1EPACKET,
+        DATA1FPACKET,
+        DATA20PACKET,
+        DATA21PACKET,
+        DATA22PACKET,
+        DATA23PACKET,
+        DATA24PACKET,
+        DATA25PACKET,
+        DATA26PACKET};
 
-// заполнить пакет данными, номер пакета передается уже +1
+// чряюыэшЄ№ яръхЄ фрээ√ьш, эюьхЁ яръхЄр яхЁхфрхЄё  єцх +1
+// u8 type_packet - Єшя яръхЄр
+// u16 num_packet - эюьхЁ яръхЄр
 void fill_date_packet(u8 type_packet, u16 num_packet){
  u16 shift_fifo;
  int crc;
 
- //вычисляем смещение пакета и номер пакета УМЕНЬШАЕМ на единицу
+ //т√ўшёы хь ёьх∙хэшх яръхЄр ш эюьхЁ яръхЄр ╙╠┼═▄╪└┼╠ эр хфшэшЎє
  shift_fifo=(num_packet--)*MAXPACKETLEN;
-  //помещаем в пакет его длину (без завершающего EOFPACKET)
+  //яюьх∙рхь т яръхЄ хую фышэє (схч чртхЁ°р■∙хую EOFPACKET)
  packets[shift_fifo-LENPACKET]=len_of_packets[type_packet];
-  //в справочном массиве указываем длину пакета
+  //т ёяЁртюўэюь ьрёёштх єърч√трхь фышэє яръхЄр
  queue[num_packet].len=len_of_packets[type_packet];
-  //помещаем (и увеличиваем) порядковый номер пакета
+  //яюьх∙рхь (ш єтхышўштрхь) яюЁ фъют√щ эюьхЁ яръхЄр
  packets[shift_fifo-NUMPACKET]=counts_packet;
  queue[num_packet].numeric=counts_packet++;
-  //указываем тип пакета
+  //єърч√трхь Єшя яръхЄр
  packets[shift_fifo-TYPEPACKET]=type_packet;
-  //подсчитываем и помещаем CRC пакета
+  //яюфёўшЄ√трхь ш яюьх∙рхь CRC яръхЄр
  crc=crc16(&packets[shift_fifo-len_of_packets[type_packet]],len_of_packets[type_packet]-2);
  packets[shift_fifo-CRCPACKET]=crc>>8;
  packets[shift_fifo-CRCPACKET+1]=crc;

@@ -1,4 +1,4 @@
-// $Id: uart_s.c,v 1.14 2004-03-17 11:34:16 peter Exp $
+// $Id: uart_s.c,v 1.15 2004-03-18 16:51:15 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 
@@ -11,6 +11,9 @@
 
 // "inline" функции для 149 процессора
 #include "m149.h"
+
+// модуль для работы с пакетами
+#include "uart_p.h"
 
 
 #define STEND_N 2
@@ -327,16 +330,6 @@ extern u16   asp_trn_fifo_buf[SERIAL_FIFO_TRN_LEN];           /* storage for ser
 #define WAIT_ACK  3     //ожидающий подтверждения
 #define PACKREC   4     //принятый пакет
 
-struct que{
- u8 busy;    //место занято. 
-                //0 - свободно
-                //1 - занято
-                //2 не передано (необходимо подтверждение)
-                //3 передано (ждем подтверждения)
-                //4 не передано (подтверждения не потребуется)
- u8 numeric; //порядковый номер пакета
- u8 len;
-};
 
 extern struct que queue[MAXQUE];
 extern u8 packets[MAXQUE*MAXPACKETLEN];

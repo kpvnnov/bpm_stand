@@ -1,11 +1,11 @@
-//$Id: global.h,v 1.26 2004-03-07 21:31:50 peter Exp $
+//$Id: global.h,v 1.27 2004-03-18 16:51:14 peter Exp $
 
 
 #define DEBUG_SERIAL
 
 
-//#define CLEAR_DOG()	WDTCTL=(WDTCTL&0x00FF)+WDTPW+WDTCNTCL
-#define CLEAR_DOG()	WDTCTL=WDTPW|WDTHOLD
+//#define CLEAR_DOG()   WDTCTL=(WDTCTL&0x00FF)+WDTPW+WDTCNTCL
+#define CLEAR_DOG()     WDTCTL=WDTPW|WDTHOLD
 
 //#define DISPLAY
 
@@ -16,10 +16,10 @@
 
 //таймер
 struct tm_in {
-	int sec;
-	int min;
-	int hour;
-	int day;
+        int sec;
+        int min;
+        int hour;
+        int day;
 };
 
 #define SECS_IN_MIN (time_in)60
@@ -36,8 +36,8 @@ void tick_timer(void);
 
 
 // АЦП
-void init_adc(void);	//инициализация АЦП
-void off_adc(void);	//выключение АЦП
+void init_adc(void);    //инициализация АЦП
+void off_adc(void);     //выключение АЦП
 #define  ADC_FIFO_RCV_LEN  8           /* size of fifo ADC buffer   */
 #define  SIZE_OF_ADC_DUMP  8
 #define  NUM_CHANEL 32
@@ -70,7 +70,6 @@ u8 write_asp_trn_fifo(u8 data_wr);
 void init_uart(void);
 void update_diplay(void);
 void work_with_serial_rec(void);
-int hold_packet(void);
 void set_adc(int ch);
 void set_adc_temperature(void);
 
@@ -84,11 +83,11 @@ void set_adc_temperature(void);
 
 
 
-#define  ALL_JOB	0
-#define  DISPLAY_JOB	1
-#define  SERIAL_JOB	2
-#define  ADC_JOB	3
-#define	 STAT_JOB	4
+#define  ALL_JOB        0
+#define  DISPLAY_JOB    1
+#define  SERIAL_JOB     2
+#define  ADC_JOB        3
+#define  STAT_JOB       4
 //захват начала работы в прерывании
 //если в прерывание вошли из режима спячки, то:
 //суммируем время спячки, перезаряжаем timer_hold
@@ -139,12 +138,12 @@ void set_adc_temperature(void);
 
 enum chanel_job{
         NO_JOB,
-	LEVEL_UP,	//накачиваем давление
-	LEVEL_DOWN
+        LEVEL_UP,       //накачиваем давление
+        LEVEL_DOWN
        };
 
-#define open_valve()	{valve_hold=0;P2OUT&=~(BIT4+BIT5);}
+#define open_valve()    {valve_hold=0;P2OUT&=~(BIT4+BIT5);}
 #define set_hold()      P2OUT&=~BIT5
-#define close_valve()	{valve_hold=4;P2OUT|=(BIT4+BIT5);}
-#define on_pump()	P4OUT|=BIT0
-#define off_pump()	P4OUT&=~BIT0
+#define close_valve()   {valve_hold=4;P2OUT|=(BIT4+BIT5);}
+#define on_pump()       P4OUT|=BIT0
+#define off_pump()      P4OUT&=~BIT0

@@ -1,4 +1,4 @@
-// $Id: timer_a.c,v 1.18 2004-03-07 21:31:50 peter Exp $
+// $Id: timer_a.c,v 1.19 2004-03-18 16:51:15 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 
@@ -8,6 +8,10 @@
 #ifdef STEND
 #include "uart_s.h"
 #endif // STEND
+
+// модуль для работы с пакетами
+#include "uart_p.h"
+
 
 #include "global.h"
 
@@ -75,24 +79,24 @@ int volt_to_show;
 int capture_timer;
 
 int change_to_mode;
-	// 0 - ACLK 1 - SMCLK
+        // 0 - ACLK 1 - SMCLK
 int mode_timer;
 int counter_timer;
 //int refresh_timer;
 int sub_counter_timer;
-	//это время по гринвичу
+        //это время по гринвичу
 time_in GlobalTime;
 int second_point;
 int invert;
-	//если не 0, то запускаемя на полной скорости
+        //если не 0, то запускаемя на полной скорости
 int run_full_speed;
-	//переключаемся на скоростной режим таймера
+        //переключаемся на скоростной режим таймера
 int switch_speed_timer;
 
 // дисплей
 int mode_display;
 int update_display;
-	//это время в формате long для показа на индикатор
+        //это время в формате long для показа на индикатор
 time_in time_to_show;
 int symbl[4];
 unsigned int displ[2];
