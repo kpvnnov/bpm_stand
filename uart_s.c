@@ -1,4 +1,4 @@
-// $Id: uart_s.c,v 1.4 2003-06-17 18:44:01 peter Exp $
+// $Id: uart_s.c,v 1.5 2003-06-18 19:51:09 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -14,6 +14,11 @@ extern u16 timer_sum_serial;
 extern u16 timer_sum_adc;
 extern u16 timer_sum_stat;
 extern u16 why_job;
+
+
+extern unsigned int current_level;
+extern unsigned int what_doing;
+unsigned int to_level;
 
 extern u16 stat_buf[STAT_FIFO_RCV_LEN*SIZE_STAT];
 extern unsigned int  stat_rcv_fifo_start;      /* stat receive buffer start index      */
@@ -247,7 +252,7 @@ _________________________________________________________________
 #define  CHANNEL_TO_SET 6       //значение номера канала АЦП в 9-ом пакете
 #define  NUM_OF_CHANNEL_DAC 6   //значение номера канала ЦАП в 8-ом пакете
 #define  VALVE_OF_CHANNEL_DAC 8 //значение для ЦАП в 8-ом пакете
-
+#define  LEVEL_SET	8	//значение данных в 3-х байтовом пакете
 
 #define  DATA3PACKET    24	//смещение (с конца) положения в пакете размещения данных
 #define  DATA5PACKET     (SIZE_STAT*2+6)
@@ -590,6 +595,41 @@ u16 shift_fifo;
       break;
      case 0x09:
       chanel=packets[shift_fifo-CHANNEL_TO_SET];
+      break;
+     case 0x0B:		//закрыть клапан
+      break;
+     case 0x0C:		//открыть клапан
+      break;
+     case 0x0D:		//спустить давление до требуемой величины
+	//     содержание пакета:
+        //  в пакете слово (+1 байт reserved) - абсолютное 
+        //  значение до которого  необходимо опуститься и закрыть клапан
+        //  12 бит текущего опорного (основного или резервного)
+        //  канала 
+        // общее количество данных 3 байта
+       what_doing=NO_JOB;
+       to_level=packets[shift_fifo-LEVEL_SET]+(packets[shift_fifo-LEVEL_SET+1]<<8);
+       to_level&=0xFFF;
+       open_valve();
+       what_doing=LEVEL_DOWN;
+      break;
+     case 0x0E:		//накачать давление до указанной величины
+	//     содержание пакета:
+        //  в пакете слово (+1 байт reserved) - абсолютное 
+        //  значение до которого необходимо накачать давление
+        //  предварительно необходимо дать комманду
+        //  закрыть клапан
+        // общее количество данных 3 байта
+       what_doing=NO_JOB;
+       to_level=packets[shift_fifo-LEVEL_SET]+(packets[shift_fifo-LEVEL_SET+1]<<8);
+       to_level&=0xFFF;
+       close_valve();
+       on_pump();
+       what_doing=LEVEL_UP;
+      break;
+     case 0x0F:		//выключить компрессор. Данная команда прекращает
+      break;
+     case 0x15:		//установка давления при достижении которого
       break;
      }
     //отправить подтверждение

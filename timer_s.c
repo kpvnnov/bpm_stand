@@ -1,4 +1,4 @@
-// $Id: timer_s.c,v 1.3 2003-06-10 14:27:38 peter Exp $
+// $Id: timer_s.c,v 1.4 2003-06-18 19:51:09 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -16,6 +16,11 @@ extern u16 timer_sum_stat;
 extern u16 timer_diff_min;
 extern u16 timer_diff_max;
 extern u16 why_job;
+
+
+extern unsigned int current_level;
+extern unsigned int what_doing;
+extern unsigned int to_level;
 
 
 
@@ -311,6 +316,24 @@ HOLD_TIME_IRQ()
         set_adc(chanel_convert);
         }
        ADC12CTL0 |= ADC12SC;                 // Start conversion
+       switch(what_doing){
+        case NO_JOB:
+         break;
+        case LEVEL_UP:
+         if (to_level<=current_level){
+          off_pump();
+          what_doing=NO_JOB;
+          }
+         break;
+        case LEVEL_DOWN:
+         if (to_level>=current_level){
+          close_valve();
+          what_doing=NO_JOB;
+          }
+         break;
+        default:
+         what_doing=NO_JOB;
+        }
        }
       else {
 //       error_adc=1;

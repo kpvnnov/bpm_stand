@@ -1,5 +1,5 @@
 
-// $Id: adc_s.c,v 1.3 2003-06-10 14:27:38 peter Exp $
+// $Id: adc_s.c,v 1.4 2003-06-18 19:51:09 peter Exp $
 #include  <msp430x14x.h>
 #include "global.h"
 
@@ -21,6 +21,10 @@ unsigned int results2[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
 unsigned int results3[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
 unsigned int results[ADC_FIFO_RCV_LEN];
                                         
+unsigned int current_level;
+unsigned int what_doing;
+unsigned int timer1;
+
 extern int error_adc;
 
 extern int end_adc_conversion;
@@ -55,8 +59,8 @@ HOLD_TIME_IRQ()
   sh=(adc_rcv_fifo_end & (ADC_FIFO_RCV_LEN-1));
   switch(rotate_channel){
    case 0:
-    sum=0;
-    sum+=ADC12MEM0;
+    sum=ADC12MEM0;
+    current_level=sum;
     sum+=ADC12MEM2;
     sum+=ADC12MEM4;
     sum+=ADC12MEM6;
@@ -65,8 +69,8 @@ HOLD_TIME_IRQ()
     sum+=ADC12MEM12;
     sum+=ADC12MEM14;
     results0[sh]=sum;
-    sum=0;
-    sum+=ADC12MEM1;
+
+    sum=ADC12MEM1;
     sum+=ADC12MEM3;
     sum+=ADC12MEM5;
     sum+=ADC12MEM7;
@@ -80,8 +84,7 @@ HOLD_TIME_IRQ()
     SUM_TIME_IRQ_NOSLEEP();
     break;
    case 1:
-    sum=0;
-    sum+=ADC12MEM0;
+    sum=ADC12MEM0;
     sum+=ADC12MEM2;
     sum+=ADC12MEM4;
     sum+=ADC12MEM6;
@@ -90,8 +93,8 @@ HOLD_TIME_IRQ()
     sum+=ADC12MEM12;
     sum+=ADC12MEM14;
     results2[sh]=sum;
-    sum=0;
-    sum+=ADC12MEM1;
+
+    sum=ADC12MEM1;
     sum+=ADC12MEM3;
     sum+=ADC12MEM5;
     sum+=ADC12MEM7;
@@ -117,6 +120,7 @@ HOLD_TIME_IRQ()
   sh=(adc_rcv_fifo_end & (ADC_FIFO_RCV_LEN-1))*SIZE_OF_ADC_DUMP;
 
   results0[sh]   = ADC12MEM0;               
+  current_level=results0[sh];
   results1[sh++] = ADC12MEM1;               
   results0[sh]   = ADC12MEM2;
   results1[sh++] = ADC12MEM3;               

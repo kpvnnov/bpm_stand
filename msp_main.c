@@ -1,11 +1,14 @@
 //********************************************************
-// $Id: msp_main.c,v 1.22 2003-06-06 13:34:58 peter Exp $
+// $Id: msp_main.c,v 1.23 2003-06-18 19:51:09 peter Exp $
 //********************************************************
 
 //#include <msp430x11x1.h>
 //#include  <msp430x13x.h>
 #include  <msp430x14x.h>
 #include "global.h"
+#include "change.log"
+
+static const char* rev=REVISION;
 
 u16 temp_hold;
 u16 timer_hold;
@@ -20,6 +23,9 @@ u16 timer_sum_stat;
 u16 timer_diff_min;
 u16 timer_diff_max;
 u16 why_job;
+
+
+extern unsigned int what_doing;
 
 
 extern unsigned int  stat_rcv_fifo_start;      /* stat receive buffer start index      */
@@ -307,6 +313,7 @@ int i;
  time_to_change=0;
  stat_rcv_fifo_start=0;
  stat_rcv_fifo_end=0;
+ what_doing=0;
  if (IFG1&0x01){	//сработал WATCHDOG
 	//то считаем пока это аварийным режимом
 	//выключаем ноги от блока USART1

@@ -1,4 +1,4 @@
-//$Id: global.h,v 1.18 2003-06-09 20:09:18 peter Exp $
+//$Id: global.h,v 1.19 2003-06-18 19:51:09 peter Exp $
 
 
 #define DEBUG_SERIAL
@@ -147,3 +147,16 @@ void set_adc(int ch);
 //суммируем время работы в прерывании и захват начала работы основной программы
 #define SUM_TIME_IRQ()   timer_hold=TAR+2;timer_sum_int+=timer_hold-temp_hold;sleep=0
 #define SUM_TIME_IRQ_NOSLEEP()   timer_hold=TAR+3;timer_sum_int+=timer_hold-temp_hold
+
+
+
+enum chanel_job{
+        NO_JOB,
+	LEVEL_UP,	//накачиваем давление
+	LEVEL_DOWN
+       };
+
+#define close_valve()	P3OUT&=~BIT1
+#define open_valve()	P3OUT&=~BIT1
+#define on_pump()	P3OUT&=~BIT1
+#define off_pump()	P3OUT&=~BIT1
