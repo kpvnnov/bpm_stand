@@ -1,4 +1,4 @@
-// $Id: uart.c,v 1.4 2003-05-07 14:45:33 peter Exp $
+// $Id: uart.c,v 1.5 2003-05-13 15:11:43 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -131,7 +131,6 @@ for (x=0;x<MAXQUE;x++){
 
 
 void init_uart0(void){
-int x;
   UCTL0 = CHAR;                         // 8-bit character
   UTCTL0 = SSEL0;                       // UCLK = ACLK
   UBR00 = 0x45;                         // 8MHz 115200
@@ -139,23 +138,34 @@ int x;
   UMCTL0 = 0x00;                        // 8MHz 115200 modulation
   ME1 |= UTXE0 + URXE0;                 // Enable USART0 TXD/RXD
   IE1 |= URXIE0;                        // Enable USART0 RX interrupt
-  P3SEL |= 0x30;                        // P3.4,5 = USART0 TXD/RXD
-  P3DIR |= 0x10;                        // P3.4 output direction
+
+}
+void init_uart1(void){
+int x;
+
+  UCTL1 = CHAR;                         // 8-bit character
+  UTCTL1 = SSEL1;                       // UCLK = SMCLK
+  UBR01 = 0x45;                         // 8Mhz/115200 - 69.44
+  UBR11 = 0x00;                         //
+  UMCTL1 = 0x2C;                        // modulation
+  ME2 |= UTXE1 + URXE1;                 // Enable USART1 TXD/RXD
+  IE2 |= URXIE1;			// Enable USART1 RX+TX interrupt
+//+ UTXIE1;                
   for (x=0;x<MAXQUE;x++) queue[x].busy=FREEPLACE;
 
-
 }
 
 
 
 
 
-interrupt[UART0TX_VECTOR] void usart0_tx (void)
+interrupt[UART1TX_VECTOR] void usart1_tx (void)
 {
- if (asp_trn_fifo_start!=asp_trn_fifo_end)
-  TXBUF0 = asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
+ TXBUF1 = asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
+ if (asp_trn_fifo_start==asp_trn_fifo_end) // если данных больше нет
+  IE2 &= ~UTXIE1;                          // то запрещаем прерыв. передачи
 }
-interrupt[UART0RX_VECTOR] void usart0_rx (void)
+interrupt[UART1RX_VECTOR] void usart0_rx (void)
 {
 
 //  while ((IFG1 & UTXIFG0) == 0);        // USART0 TX buffer ready?
@@ -172,7 +182,7 @@ interrupt[UART0RX_VECTOR] void usart0_rx (void)
 
 
 // - добавить в отладочном режиме эту проверку if ( ( (asp_rcv_fifo_end+1)&(SERIAL_FIFO_RCV_LEN-1))!= (asp_rcv_fifo_start&(SERIAL_FIFO_RCV_LEN-1)) )
-  asp_rcv_fifo_buf[asp_rcv_fifo_end++ & (SERIAL_FIFO_RCV_LEN-1)]=RXBUF0;
+  asp_rcv_fifo_buf[asp_rcv_fifo_end++ & (SERIAL_FIFO_RCV_LEN-1)]=RXBUF1;
 
 
 
@@ -226,10 +236,15 @@ u16 t_start;
 //  asp_trn_fifo_end+=counter;
   disable_int_no_interrupt();
   //если фифошка не пустая и прерывания запрещены, то разрешаем их
-  if ( ((asp_trn_fifo_end&(SERIAL_FIFO_TRN_LEN-1))!=(asp_trn_fifo_start&(SERIAL_FIFO_TRN_LEN-1)))&&
-        ((IFG1 & UTXIFG0) != 0)  ){	//прерывания передачи запрещены?
-   TXBUF0 = asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
-   }
+  if ( ((asp_trn_fifo_end&(SERIAL_FIFO_TRN_LEN-1))!=(asp_trn_fifo_start&(SERIAL_FIFO_TRN_LEN-1)))
+//&&
+  )
+   IE2 |= UTXIE1;		// данные в фифошке есть - разрешаем прерывания передачи
+
+//        ((IFG2 & UTXIFG1) != 0)  ){	//прерывания передачи запрещены?
+
+//   TXBUF1 = asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
+//   }
   enable_int_no_interrupt();
 // }while(len);
 return len;
@@ -240,10 +255,13 @@ u8 write_asp_trn_fifo(u8 data_wr){
   return 0;
  disable_int_no_interrupt();
  asp_trn_fifo_buf[asp_trn_fifo_end++ & (SERIAL_FIFO_TRN_LEN-1)]=data_wr;
-
- if ((IFG1 & UTXIFG0) != 0)        // USART0 TX buffer ready?
-  TXBUF0 = asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
+ IE2 |= UTXIE1;		// данные в фифошке есть - разрешаем прерывания передачи
+// if ((IFG2 & UTXIFG1) != 0)        // USART0 TX buffer ready?
+//  TXBUF1 = asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
  enable_int_no_interrupt();
  return 1;
 }
 
+unsigned int crc16(void* massiv,int len){
+return 0;
+}

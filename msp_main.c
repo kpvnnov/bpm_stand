@@ -1,5 +1,5 @@
 //******************************************************************************
-// $Id: msp_main.c,v 1.10 2003-05-07 14:45:33 peter Exp $
+// $Id: msp_main.c,v 1.11 2003-05-13 15:11:43 peter Exp $
 //  MSP-FET430X110 Demo - Demonstrate LPM3, WDT Interrupt   
 //
 //  Description; This program operates MSP430 normally in LPM3, pulsing P1.0 
@@ -135,16 +135,25 @@ void set_pin_directions(void){
   P1OUT = 0;                            // All P1.x reset
   P2DIR = 0xFF;                         // All P2.x outputs
   P2OUT = 0;                            // All P2.x reset
+
+  P3SEL |= 0xC0;                        // P3.6,7 = USART1 option select
+//  P3DIR |= 0x20;                        // P3.6 = output direction
   P3DIR = 0xFF;                         // All P3.x outputs
   P3OUT = 0;                            // All P3.x reset
+
+//  P3SEL |= 0x30;                        // P3.4,5 = USART0 TXD/RXD
+//  P3DIR |= 0x10;                        // P3.4 output direction
+
+
   P4DIR = 0xFF;                         // All P4.x outputs
   P4OUT = 0;                            // All P4.x reset
   P5DIR = 0xFF;                         // All P5.x outputs
   P5OUT = 0;                            // All P5.x reset
-  P5SEL = 0x0E;
+//  P5SEL = 0x0E; SPI1
   P6DIR = 0xFF;                         // All P6.x outputs
   P6OUT = 0;                            // All P6.x reset
   P6SEL = 0x0F;                         // Enable A/D channel inputs
+
 
 }
 int current_speed;
@@ -207,7 +216,7 @@ void main(void)
 //запускаем таймер A и часы от него
  init_timer_a();
  init_adc();
-
+ init_uart1();
  if (current_speed==0 && power_good()  && run_xt2()){
   switch_xt2();
   }
@@ -223,7 +232,7 @@ void main(void)
     tick_timer();
     work_with_display();
     work_with_serial();
-    work_serial_transmit();
+    work_with_adc_put();
 //    P1OUT &= ~0x01;                     // Reset P1.0 LED off
   }
 

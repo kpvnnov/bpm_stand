@@ -1,5 +1,5 @@
 
-// $Id: adc.c,v 1.2 2003-05-07 14:45:33 peter Exp $
+// $Id: adc.c,v 1.3 2003-05-13 15:11:42 peter Exp $
 #include  <msp430x14x.h>
 #include "global.h"
 
@@ -58,7 +58,7 @@ void work_with_adc_put(void){
 int p;
 
  if (adc_rcv_fifo_start==adc_rcv_fifo_end) return ;
- if (counter++>100){
+ if (counter++>=1){
   counter=0;
   p=(adc_rcv_fifo_start++ & (ADC_FIFO_RCV_LEN-1))<<3;
   put_packet_type3((u8*)&results[p]);

@@ -1,4 +1,4 @@
-// $Id: timer_a.c,v 1.3 2003-05-07 14:45:33 peter Exp $
+// $Id: timer_a.c,v 1.4 2003-05-13 15:11:43 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -356,6 +356,20 @@ void init_spi1_master(int regim){
  UMCTL0=0;
 }
 
+//высылаем программно SPI1
+void send_one_byte_displ(u8 data){
+int x;
+for (x=0;x<8;x++){
+ if (data&0x80)
+  P5OUT|=BIT1;
+ else
+  P5OUT&=~BIT1;
+ P5OUT|=BIT3;
+ P5OUT&=~BIT3;
+ data<<=1;
+ }
+}
+
 //высылает displ по SPI в индикатор
 void show_display(int regim){
 int x;
@@ -364,7 +378,8 @@ int x;
   displ[1]|=0x80;
  else
   displ[1]&=~0x80;
-
+/*
+блок работы с дисплеем через аппаратный SPI1
  init_spi1_master(regim);
  cs_on_display();
  for (x=0;x<4;x++){
@@ -374,6 +389,13 @@ int x;
   }
  while ((UTCTL1&TXEPT)==0) ;
  cs_off_display();
+*/
+// блок работы с дисплеем через ножки SPI1 
+ cs_on_display();
+ for (x=0;x<4;x++)
+  send_one_byte_displ(invert ? displ[x]:displ[x]^0xFF);
+ cs_off_display();
+
 }
 
 const char symbols[]={
