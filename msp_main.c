@@ -1,11 +1,26 @@
 //********************************************************
-// $Id: msp_main.c,v 1.16 2003-05-23 17:00:28 peter Exp $
+// $Id: msp_main.c,v 1.17 2003-05-26 16:39:57 peter Exp $
 //********************************************************
 
 //#include <msp430x11x1.h>
 //#include  <msp430x13x.h>
 #include  <msp430x14x.h>
 #include "global.h"
+
+u16 timer_hold;
+u16 timer_sum;
+u16 timer_sum_int;
+u16 timer_sum_idle;
+u16 sleep;
+
+
+extern unsigned int  stat_rcv_fifo_start;      /* stat receive buffer start index      */
+
+extern volatile unsigned int  stat_rcv_fifo_end;        /* stat receive  buffer end index        */
+
+
+#define power_good()  1
+
 
 // ј÷ѕ
 extern int end_adc_conversion;
@@ -90,7 +105,8 @@ unsigned int to_compare,to_compare1;
   else
    to_compare=0x2000+to_compare1-to_compare;
 	//если таймер бежит, то считаем, что кварц запустилс€
-  if (to_compare>16) t++; else t=0;
+//  if (to_compare>16) t++; else t=0;
+  if (to_compare>2) t++; else t=0;
 	//сброс WatchDog
   if (t>ACLK_GO) break;	//считаем, что часовой кварц запустилс€
   WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
@@ -254,6 +270,8 @@ int i;
  time_to_show=1;
  change_to_mode=0;
  time_to_change=0;
+ stat_rcv_fifo_start=0;
+ stat_rcv_fifo_end=0;
  if (IFG1&0x01){	//сработал WATCHDOG
 	//то считаем пока это аварийным режимом
 	//выключаем ноги от блока USART1
@@ -338,15 +356,16 @@ int i;
   }
  init_adc();
  init_uart1();
+ CCR2=TAR+0x100;	//workaround прерывани€ часового
 
   _EINT();                              // Enable interrupts
   
   while(1)
   {
 //    BCSCTL2|=SELM0|SELM1;
-    _BIS_SR(CPUOFF);                 // входим в режим сп€чки
+//    _BIS_SR(CPUOFF);                 // входим в режим сп€чки
+    SUM_TIME();
     P1OUT |= 0x01;                      // Set P1.0 LED on
-
     //-----------------
     // работа с "дисплеем"
     //-----------------
@@ -355,7 +374,8 @@ int i;
      tick_timer();
      work_with_display();
      P1OUT &= ~0x01;                     // Reset P1.0 LED off
-     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
+//     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
+     SUM_TIME();
      P1OUT |= 0x01;                      // Set P1.0 LED on
      }
 
@@ -365,7 +385,8 @@ int i;
     if (packet_in_fifo&&(fifo_trn_depth<(SERIAL_FIFO_TRN_LEN/2))){
      work_with_serial();
      P1OUT &= ~0x01;                     // Reset P1.0 LED off
-     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
+//     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
+     SUM_TIME();
      P1OUT |= 0x01;                      // Set P1.0 LED on
      }
 
@@ -377,7 +398,21 @@ int i;
     if (adc_rcv_fifo_start!=adc_rcv_fifo_end){
      work_with_adc_put();
      P1OUT &= ~0x01;                     // Reset P1.0 LED off
-     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
+//     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
+     SUM_TIME();
+     P1OUT |= 0x01;                      // Set P1.0 LED on
+     }
+    //-----------------
+
+
+    //-----------------
+    // работа с данными статистики
+    //-----------------
+    if (stat_rcv_fifo_start!=stat_rcv_fifo_end){
+     put_packet_type5();
+     P1OUT &= ~0x01;                     // Reset P1.0 LED off
+//     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
+     SUM_TIME();
      P1OUT |= 0x01;                      // Set P1.0 LED on
      }
     //-----------------
@@ -393,3 +428,8 @@ int i;
 interrupt[NMI_VECTOR] void nmi(void)
 {
 }
+
+//рассчет потреблени€
+//ADC 
+// 200 mkA на два младших разр€да во врем€ преобразовани€
+// 0.5 mA (max 0.8) - внутреннее опорное

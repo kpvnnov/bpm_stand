@@ -1,8 +1,18 @@
-// $Id: uart.c,v 1.13 2003-05-23 17:00:28 peter Exp $
+// $Id: uart.c,v 1.14 2003-05-26 16:39:57 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
 
+extern u16 timer_sum_idle;
+extern u16 timer_sum_int;
+extern u16 timer_hold;
+extern u16 timer_sum;
+extern u16 sleep;
+
+extern u16 stat_buf[STAT_FIFO_RCV_LEN*SIZE_STAT];
+extern unsigned int  stat_rcv_fifo_start;      /* stat receive buffer start index      */
+
+extern volatile unsigned int  stat_rcv_fifo_end;        /* stat receive  buffer end index        */
 
 
 #ifdef DEBUG_SERIAL
@@ -14,6 +24,17 @@ s16 error_uart_depth;
 s16 error_send_serial;
 s16 length_sended_2_fifo;
 #endif //DEBUG_SERIAL
+
+
+
+extern unsigned int results0[ADC_FIFO_RCV_LEN];
+extern unsigned int results1[ADC_FIFO_RCV_LEN];
+extern unsigned int results2[ADC_FIFO_RCV_LEN];
+extern unsigned int results3[ADC_FIFO_RCV_LEN];
+extern unsigned int results4[ADC_FIFO_RCV_LEN];
+extern unsigned int results5[ADC_FIFO_RCV_LEN];
+extern unsigned int results6[ADC_FIFO_RCV_LEN];
+extern unsigned int results7[ADC_FIFO_RCV_LEN];
 
 
 /*
@@ -43,13 +64,15 @@ _____
 0x05      пакет данных статистики
 */
 
+#define DATA5PACKET     18
+
 #define  MAXQUE 8		//длина очереди пакетов
 #define  MAXPACKETLEN	64	//максимальная длина одного пакета
 #define  CRCPACKET	2	//смещение (с конца) положения в пакете CRC
 #define  LENPACKET	3	//смещение (с конца) положения в пакете длины пакета
 #define  TYPEPACKET     4	//смещение (с конца) положения в пакете типа пакета
 #define  NUMPACKET	5	//смещение (с конца) положения в пакете номера пакета
-#define  DATA3PACKET    17	//смещение (с конца) положения в пакете размещения данных
+#define  DATA3PACKET    18	//смещение (с конца) положения в пакете размещения данных
 #define  SIZEDATA3	12	//количество байт данных в пакете типа 3
 #define  ESCAPE		0x7D
 #define  EOFPACKET	0x7E	//код признака конца кадра
@@ -147,36 +170,95 @@ for (c=0;c<len;c++)
 return crc;
 }
 
-u8 put_packet_type3(u8 *info){
+u8 put_packet_type3(u16 info){
 int n;
 int crc;
+int shift_fifo;
+u16* t_p;
+//u8* t_r;
 	//захватываем свободный пакет
  if ((n=hold_packet())==MAXQUE) return 0; //свободных пакетов нет
  #ifdef DEBUG_SERIAL
  packet_in_fifo++;
  #endif //DEBUG_SERIAL
+ shift_fifo=(n+1)*MAXPACKETLEN;
 	//копируем туда данные для пакета
- memcpy(&packets[(n+1)*MAXPACKETLEN-DATA3PACKET],info,SIZEDATA3); 
+ t_p=(u16*)&packets[shift_fifo-DATA3PACKET];
+
+ *t_p++=results0[info];
+ *t_p++=results1[info];
+ *t_p++=results2[info];
+ *t_p++=results3[info];
+ *t_p++=results4[info];
+
+
 	//помещаем в пакет его длину (без завершающего EOFPACKET)
- packets[(n+1)*MAXPACKETLEN-LENPACKET]=DATA3PACKET;
+ packets[shift_fifo-LENPACKET]=DATA3PACKET;
 	//помещаем (и увеличиваем) порядковый номер пакета
- packets[(n+1)*MAXPACKETLEN-NUMPACKET]=counts_packet;
+ packets[shift_fifo-NUMPACKET]=counts_packet;
  queue[n].numeric=counts_packet++;
 	//указываем тип пакета
- packets[(n+1)*MAXPACKETLEN-TYPEPACKET]=0x03;
+ packets[shift_fifo-TYPEPACKET]=0x03;
 	//подсчитываем и помещаем CRC пакета
- crc=crc16(&packets[(n+1)*MAXPACKETLEN-DATA3PACKET],DATA3PACKET-2);
- packets[(n+1)*MAXPACKETLEN-CRCPACKET]=crc>>8;
- packets[(n+1)*MAXPACKETLEN-CRCPACKET+1]=crc;
+ crc=crc16(&packets[shift_fifo-DATA3PACKET],DATA3PACKET-2);
+ packets[shift_fifo-CRCPACKET]=crc>>8;
+ packets[shift_fifo-CRCPACKET+1]=crc;
 
 	//в справочном массиве указываем длину пакета
  queue[n].len=DATA3PACKET;
  queue[n].busy=NOTSENDED;
 return 1;
 }
+//отправляем пакет со статистикой
+u8 put_packet_type5(void){
+int n;
+int x;
+int crc;
+int shift_fifo;
+u16* t_p;
+u16* t_s;
+	//захватываем свободный пакет
+ if ((n=hold_packet())==MAXQUE) return 0; //свободных пакетов нет
+ #ifdef DEBUG_SERIAL
+ packet_in_fifo++;
+ #endif //DEBUG_SERIAL
+ shift_fifo=(n+1)*MAXPACKETLEN;
+	//копируем туда данные для пакета
+ t_p=(u16*)&packets[shift_fifo-DATA5PACKET];
+ t_s=(u16*)&stat_buf[(stat_rcv_fifo_start & (STAT_FIFO_RCV_LEN-1))*SIZE_STAT];
+
+ for(x=0;x<SIZE_STAT;x++)
+  *t_p=*t_s;
+ stat_rcv_fifo_start++;
+
+// *t_p++=results0[info];
+// *t_p++=results1[info];
+// *t_p++=results2[info];
+// *t_p++=results3[info];
+// *t_p++=results4[info];
+
+
+	//помещаем в пакет его длину (без завершающего EOFPACKET)
+ packets[shift_fifo-LENPACKET]=DATA5PACKET;
+	//помещаем (и увеличиваем) порядковый номер пакета
+ packets[shift_fifo-NUMPACKET]=counts_packet;
+ queue[n].numeric=counts_packet++;
+	//указываем тип пакета
+ packets[shift_fifo-TYPEPACKET]=0x05;
+	//подсчитываем и помещаем CRC пакета
+ crc=crc16(&packets[shift_fifo-DATA5PACKET],DATA5PACKET-2);
+ packets[shift_fifo-CRCPACKET]=crc>>8;
+ packets[shift_fifo-CRCPACKET+1]=crc;
+
+	//в справочном массиве указываем длину пакета
+ queue[n].len=DATA5PACKET;
+ queue[n].busy=NOTSENDED;
+return 1;
+}
 u8 put_packet_type4(void){
 int n;
 int crc;
+int shift_fifo;
 	//захватываем свободный пакет
  if ((n=hold_packet())==MAXQUE) {
   #ifdef DEBUG_SERIAL
@@ -188,18 +270,19 @@ int crc;
  packet_in_fifo++;
  #endif //DEBUG_SERIAL
 
- packets[(n+1)*MAXPACKETLEN-11]='0';
- packets[(n+1)*MAXPACKETLEN-10]='9';
- packets[(n+1)*MAXPACKETLEN-9]='8';
- packets[(n+1)*MAXPACKETLEN-8]='7';
- packets[(n+1)*MAXPACKETLEN-7]='6';
- packets[(n+1)*MAXPACKETLEN-6]='5';
- packets[(n+1)*MAXPACKETLEN-5]='4';
- packets[(n+1)*MAXPACKETLEN-4]='3';
- packets[(n+1)*MAXPACKETLEN-3]='2';
- crc=crc16(&packets[(n+1)*MAXPACKETLEN-13],11);
- packets[(n+1)*MAXPACKETLEN-CRCPACKET]=crc>>8;
- packets[(n+1)*MAXPACKETLEN-CRCPACKET+1]=crc;
+ shift_fifo=(n+1)*MAXPACKETLEN;
+ packets[shift_fifo-11]='0';
+ packets[shift_fifo-10]='9';
+ packets[shift_fifo-9]='8';
+ packets[shift_fifo-8]='7';
+ packets[shift_fifo-7]='6';
+ packets[shift_fifo-6]='5';
+ packets[shift_fifo-5]='4';
+ packets[shift_fifo-4]='3';
+ packets[shift_fifo-3]='2';
+ crc=crc16(&packets[shift_fifo-13],11);
+ packets[shift_fifo-CRCPACKET]=crc>>8;
+ packets[shift_fifo-CRCPACKET+1]=crc;
  queue[n].len=13;
  queue[n].busy=NOTSENDED;
 return 1;
@@ -303,6 +386,9 @@ int x;
 //прерывание serial port 1
 interrupt[UART1TX_VECTOR] void usart1_tx (void)
 {
+int temp_led;
+HOLD_TIME_IRQ()
+ temp_led=P1OUT;
  TXBUF1 = asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
  #ifdef DEBUG_SERIAL
   if (fifo_trn_depth_max<fifo_trn_depth) fifo_trn_depth_max=fifo_trn_depth;
@@ -314,6 +400,8 @@ interrupt[UART1TX_VECTOR] void usart1_tx (void)
   if (fifo_trn_depth) error_uart_depth++;
   #endif
   }
+ P1OUT = temp_led;                     // return led state
+SUM_TIME_IRQ();
 }
 interrupt[UART1RX_VECTOR] void usart0_rx (void)
 {

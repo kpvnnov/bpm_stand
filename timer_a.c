@@ -1,13 +1,25 @@
-// $Id: timer_a.c,v 1.10 2003-05-23 17:00:28 peter Exp $
+// $Id: timer_a.c,v 1.11 2003-05-26 16:39:57 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
+
+extern u16 timer_sum_idle;
+extern u16 timer_sum_int;
+extern u16 timer_hold;
+extern u16 timer_sum;
+extern u16 sleep;
+
+unsigned int  stat_rcv_fifo_start;      /* stat receive buffer start index      */
+
+volatile unsigned int  stat_rcv_fifo_end;        /* stat receive  buffer end index        */
+u16 stat_buf[STAT_FIFO_RCV_LEN*SIZE_STAT];
 
 
 //ADC
 extern int end_adc_conversion;
 extern int error_adc;
-extern unsigned int results[];         // Needs to be global in this example
+extern unsigned int results0[ADC_FIFO_RCV_LEN];
+extern unsigned int results4[ADC_FIFO_RCV_LEN];
 
 int gradus_to_show;
 int volt_to_show;
@@ -17,7 +29,7 @@ int change_to_mode;
 	// 0 - ACLK 1 - SMCLK
 int mode_timer;
 int counter_timer;
-int refresh_timer;
+//int refresh_timer;
 int sub_counter_timer;
 	//это время по гринвичу
 time_in GlobalTime;
@@ -34,7 +46,7 @@ int update_display;
 	//это время в формате long для показа на индикатор
 time_in time_to_show;
 int symbl[4];
-int displ[4];
+unsigned int displ[2];
 
 extern int mode_work;
 extern long time_to_change;
@@ -78,7 +90,8 @@ void init_timer_a(void){
  // 1 0 SMCLK System clock SMCLK.
  // 1 1 INCLK See device description in data sheet.
  	//очищаем таймер и ставим источником ACLK
- TACTL=TASSEL0+TACLR;
+        //разрешаем прерывания таймера и делитель на 8
+ TACTL=TASSEL0+TACLR+TAIE+ID_3;
 
 
  // Bit 0: Capture/compare interrupt flag CCIFGx
@@ -157,67 +170,110 @@ void init_timer_a(void){
  // 1 Positive Edge Capture is done with rising edge.
  // 2 Negative Edge Capture is done with falling edge.
  // 3 Both Edges Capture is done with both rising and falling edges.
- CCTL0=CCIE;	// CCR0 interrupt enabled
- CCR0=32768/4; 	//8192=0x2000
- TACTL|=MC0;	// Start Timer_a in upmode
+// CCTL0=CCIE;	// CCR0 interrupt enabled
+// CCR0=32768/4; 	//8192=0x2000
+ CCTL2|= CCIE;              // interrupt enabled
+ CCR2=TAR+0x100;
+	// Start Timer_a in Continous upmode
+ TACTL|=MC_2    /* Timer A mode control: 2 - Continous up */;	
+
 }
 
-int power_good(void){
-return 1;
-}
+
 interrupt[TIMERA0_VECTOR] void timer_a_0 (void)
 {
  P1OUT |= 0x01;                      // Set P1.0 LED on
- switch(mode_timer){
-  case 0: //работа от ACLK (cчет таймера от ACLK)
-   show_display(0x01);
-	//сброс WatchDog
-   WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
-   counter_timer++;
-   update_display=1;
-   if (counter_timer>3){
-    GlobalTime++;
-    counter_timer-=4;
-    second_point^=0xFFFF;
-    }
-   if (switch_speed_timer){
-    mode_timer=1;
-    TACTL&=~(MC0|MC1); //stop
-    TACTL=ID_0|TASSEL_2;
-    CCR0=5266;	 //1400,07595898 Гц 0x1492(5266)
-    TACTL|=MC_1;
-    }
-   break; //case 0
-  case 1: //1400 Гц (счет таймера от SMCLK)
-   //  BCSCTL2=(BCSCTL2&(~(SELM0)))|SELM1;
-   if (capture_timer>=70){
-    capture_timer-=70;
-    if (end_adc_conversion){
-     end_adc_conversion=0;
-     ADC12CTL0 |= ADC12SC;                 // Start conversion
-     }
-    else {error_adc=1;}
-    }
-   capture_timer++;
-   if (refresh_timer>139){
-    show_display(0x00);
-	//сброс WatchDog
-    WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
-    refresh_timer-=140;
-    update_display=1;
-    }
-   refresh_timer++;
-   sub_counter_timer++;  // 1400 Гц (делитель 5266)
-   if (sub_counter_timer>(1399)){
-    GlobalTime++;
-    sub_counter_timer-=1400;
-    second_point^=0xFFFF;
-     }
-   break; //case 1 - 1400 Гц
-   }
  _BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
  P1OUT &= ~0x01;                     // Reset P1.0 LED off
-} 
+}
+// Timer_A3 Interrupt Vector (TAIV) handler
+interrupt [TIMERA1_VECTOR] void Timer_A(void)
+{
+int temp_led;
+u16*t_stat;
+HOLD_TIME_IRQ()
+ temp_led=P1OUT;
+ P1OUT |= 0x01;                      // Set P1.0 LED on
+ switch( TAIV )
+ {
+   case  2: //тактирование запуска АЦП
+     //в режиме SMCLK
+     //7372800/8=921600
+     //для  50 Гц необходим делитель 18432
+     //для 100 Гц необходим делитель  9216
+     //для 200 Гц необходим делитель  4608
+     //для 300 Гц необходим делитель  3072
+     //для 400 Гц необходим делитель  2304
+    switch(mode_timer){
+     case 0: //(cчет таймера от ACLK)
+      //пока ничего не делаем
+      break;
+     case 1: //(счет таймера от SMCLK)
+      CCR1 += 4608;
+//      ADC12CTL0 |= ADC12SC;                 // Start conversion
+      if (end_adc_conversion){
+       end_adc_conversion=0;
+       ADC12CTL0 |= ADC12SC;                 // Start conversion
+       }
+      else {error_adc=1;}
+      break;
+     }
+    break;
+   case  4://тактирование часов
+     //в режиме SMCLK
+     //7372800/8=921600
+     //прерывания 16 раз в секунду цикл равен 57600
+     //в режиме ACLK
+     //32768/8=921600
+     //прерывания 16 раз в секунду цикл равен 256
+    switch(mode_timer){
+     case 0: //(cчет таймера от ACLK)
+      CCR2 += 256;
+      break;
+     case 1: //(счет таймера от SMCLK)
+      CCR2 += 57600;
+      break;
+     }
+	//сброс WatchDog
+    WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
+    show_display(0x00);
+    update_display=1;
+    sub_counter_timer++;  
+    if (sub_counter_timer>15){
+     GlobalTime++;
+     sub_counter_timer-=16;
+     second_point^=0xFFFF;
+      }
+   t_stat=&stat_buf[(stat_rcv_fifo_end & (STAT_FIFO_RCV_LEN-1))*SIZE_STAT];
+   *t_stat++=timer_sum;
+   *t_stat++=timer_sum_int;
+   *t_stat++=timer_sum_idle;
+   stat_rcv_fifo_end++;
+
+    break; //тактирование часов
+
+   case 10: // overflow
+    if (switch_speed_timer){
+     mode_timer=1;
+     switch_speed_timer=0;
+     TACTL&=~(MC0|MC1); //stop
+     TACTL&=~(TASSEL0+TASSEL1); //обнуляем биты выбора источника
+     TACTL|=TASSEL_2;	//выбираем Timer A clock source select: 2 - SMCLK 
+     TACCTL1 = OUTMOD_4+CCIE;                   // CCR1 setup
+     TACCR1=TAR+0x100;
+//     ADC12CTL0 |= ENC;                     // Enable conversions
+     ADC12CTL0 |= ADC12SC;                 // Start conversion
+     TACTL|=MC_2;	//запускаем Timer A mode control: 2 - Continous up
+     }
+   break;      
+            
+ }
+// P1OUT &= ~0x01;                     // Reset P1.0 LED off
+ P1OUT = temp_led;                     // return led state
+ _BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
+SUM_TIME_IRQ();
+}
+
 interrupt[WDT_VECTOR] void wd_int (void)
 {
  _BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
@@ -368,19 +424,6 @@ void init_spi1_master(int regim){
  UMCTL0=0;
 }
 
-//высылаем программно SPI1
-void send_one_byte_displ(u8 data){
-int x;
-for (x=0;x<8;x++){
- if (data&0x80)
-  P5OUT|=BIT1;
- else
-  P5OUT&=~BIT1;
- P5OUT|=BIT3;
- P5OUT&=~BIT3;
- data<<=1;
- }
-}
 
 
 #define cs_on_display()	 P4OUT|=BIT7
@@ -389,28 +432,27 @@ for (x=0;x<8;x++){
 
 //высылает displ по SPI в индикатор
 void show_display(int regim){
-int x;
+int x,y;
+u16 data;
  invert^=0xFFFF;
  if (second_point & (mode_display==1)) 
-  displ[1]|=0x80;
+  displ[0]|=0x80;
  else
-  displ[1]&=~0x80;
-/*
-блок работы с дисплеем через аппаратный SPI1
- init_spi1_master(regim);
- cs_on_display();
- for (x=0;x<4;x++){
-  while ((IFG2&UTXIFG1)==0) ;
-
-  TXBUF1=invert ? displ[x]:displ[x]^0xFF;
-  }
- while ((UTCTL1&TXEPT)==0) ;
- cs_off_display();
-*/
+  displ[0]&=~0x80;
 // блок работы с дисплеем через ножки SPI1 
  cs_on_display();
- for (x=0;x<4;x++)
-  send_one_byte_displ(invert ? displ[x]:displ[x]^0xFF);
+ for (x=0;x<2;x++){
+  data=invert ? displ[x]:displ[x]^0xFFFF;
+  for (y=0;y<16;y++){
+   if (data&0x8000)
+    P5OUT|=BIT1;
+   else
+    P5OUT&=~BIT1;
+   P5OUT|=BIT3;
+   P5OUT&=~BIT3;
+   data<<=1;
+   }
+  }
  cs_off_display();
 
 }
@@ -445,10 +487,9 @@ const char symbols[]={
 
 //преобразует symbl в соответствии с symbols в displ
 void update_diplay(void){
- displ[3]=symbols[symbl[0]];
- displ[2]=symbols[symbl[1]];
- displ[1]=symbols[symbl[2]];
- displ[0]=symbols[symbl[3]];
+
+ displ[1]=(symbols[symbl[1]]<<8)|symbols[symbl[0]];
+ displ[0]=(symbols[symbl[3]]<<8)|symbols[symbl[2]];
 }
 
 
@@ -524,14 +565,14 @@ void redraw_display_minutes(int force){
    }
 }
 void redraw_display_voltage(int force){
-  if (force || (results[0]!=volt_to_show)){
-   volt_to_show=results[0];
+  if (force || (results0[0]!=volt_to_show)){
+   volt_to_show=results0[0];
    make_view_time_vol(volt_to_show);
    }
 }
 void redraw_display_celciy(int force){
-  if (force || (results[4]!=gradus_to_show)){
-   gradus_to_show=results[4];
+  if (force || (results4[0]!=gradus_to_show)){
+   gradus_to_show=results4[0];
    make_view_time_celciy(gradus_to_show);
    }
 }
