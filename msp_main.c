@@ -1,5 +1,5 @@
 //********************************************************
-// $Id: msp_main.c,v 1.18 2003-05-28 16:47:16 peter Exp $
+// $Id: msp_main.c,v 1.19 2003-05-28 20:14:00 peter Exp $
 //********************************************************
 
 //#include <msp430x11x1.h>
@@ -17,12 +17,15 @@ u16 timer_sum_display;
 u16 timer_sum_serial;
 u16 timer_sum_adc;
 u16 timer_sum_stat;
+u16 timer_diff_min;
+u16 timer_diff_max;
 u16 why_job;
 
 
 extern unsigned int  stat_rcv_fifo_start;      /* stat receive buffer start index      */
-
 extern volatile unsigned int  stat_rcv_fifo_end;        /* stat receive  buffer end index        */
+extern unsigned int  stat1_rcv_fifo_start;      /* stat receive buffer start index      */
+extern volatile unsigned int  stat1_rcv_fifo_end;        /* stat receive  buffer end index        */
 
 
 #define power_good()  1
@@ -124,7 +127,7 @@ unsigned int to_compare,to_compare1;
     symbl[0]=last_att;	//"псевдономер" попытки выводим на эран
     update_diplay();
     }
-  if ((c&0x3F)==0)      show_display(0x00);
+  if ((c&0x3F)==0)      show_display();
   c--;
   }
  return c;
@@ -321,7 +324,7 @@ int i;
      WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
      for (i = 40; i>0; i--);           // Delay
      P3OUT^=BIT6;
-     show_display(0x00);
+     show_display();
      }
   }
 	//запускаем таймер A и часы от него (ACLK)
@@ -347,7 +350,7 @@ int i;
      P3OUT^=BIT6;
      for (i = 1000; i>0; i--);           // Delay
      P3OUT^=BIT6;
-     show_display(0x00);
+     show_display();
      }
   }
 // init_wdt();
@@ -379,7 +382,7 @@ int i;
 	//и начинаем этой ногой "мигать"
      for (i = 1000; i>0; i--);           // Delay
      P3OUT^=BIT6;
-     show_display(0x00);
+     show_display();
      }
    }
   switch_xt2();
@@ -434,11 +437,6 @@ int i;
     //-----------------
     while(adc_rcv_fifo_start!=adc_rcv_fifo_end){
      if (work_with_adc_put()==0) break;
-//     P1OUT &= ~0x01;                     // Reset P1.0 LED off
-//     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
-//     SUM_TIME();
-//     _BIS_SR(CPUOFF+GIE);
-//     P1OUT |= 0x01;                      // Set P1.0 LED on
      }
     P1OUT &= ~0x01;                     // Reset P1.0 LED off
     SUM_TIME(STAT_JOB);
@@ -453,11 +451,9 @@ int i;
     //-----------------
     while (stat_rcv_fifo_start!=stat_rcv_fifo_end){
      if (put_packet_type5()==0) break;
-//     P1OUT &= ~0x01;                     // Reset P1.0 LED off
-//     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
-//     SUM_TIME();
-//     _BIS_SR(CPUOFF+GIE);
-//     P1OUT |= 0x01;                      // Set P1.0 LED on
+     }
+    while (stat1_rcv_fifo_start!=stat1_rcv_fifo_end){
+     if (put_packet_type5()==0) break;
      }
     P1OUT &= ~0x01;                     // Reset P1.0 LED off
     SUM_TIME(SERIAL_JOB);

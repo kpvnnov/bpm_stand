@@ -1,11 +1,13 @@
-//$Id: global.h,v 1.12 2003-05-28 16:47:16 peter Exp $
+//$Id: global.h,v 1.13 2003-05-28 20:14:00 peter Exp $
 
 
 #define DEBUG_SERIAL
 
 
-#define  STAT_FIFO_RCV_LEN  16           /* size of fifo STAT buffer   */
-#define SIZE_STAT	7
+#define STAT_FIFO_RCV_LEN	32           /* size of fifo STAT buffer   */
+#define STAT1_FIFO_RCV_LEN	32           /* size of fifo STAT buffer   */
+#define SIZE_STAT	9
+#define SIZE_STAT1	7
 
 
 typedef unsigned char  u08;
@@ -49,7 +51,7 @@ void init_adc(void);	//инициализация АЦП
 #define  ADC_FIFO_RCV_LEN  16           /* size of fifo ADC buffer   */
 
 //индикатор
-void show_display(int regim);
+void show_display(void);
 void redraw_display_second(int force);
 void redraw_display_minutes(int force);
 void redraw_display_voltage(int force);
@@ -86,7 +88,7 @@ void update_diplay(void);
 //суммируем время спячки, перезаряжаем timer_hold
 //иначе суммируем время работы, перезаряжаем timer_hold
 //это должно вызываться в начале прерывания
-#define HOLD_TIME_IRQ()  temp_hold=TAR-2; \
+#define HOLD_TIME_IRQ()  temp_hold=TAR; \
                          if (sleep) {timer_sum_sleep+=temp_hold-timer_hold;} \
                          else { \
                           switch(why_job){ \
@@ -123,3 +125,4 @@ void update_diplay(void);
 
 //суммируем время работы в прерывании и захват начала работы основной программы
 #define SUM_TIME_IRQ()   timer_hold=TAR+3;timer_sum_int+=timer_hold-temp_hold;sleep=0
+#define SUM_TIME_IRQ_NOSLEEP()   timer_hold=TAR+3;timer_sum_int+=timer_hold-temp_hold

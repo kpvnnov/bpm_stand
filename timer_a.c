@@ -1,4 +1,4 @@
-// $Id: timer_a.c,v 1.12 2003-05-28 16:47:16 peter Exp $
+// $Id: timer_a.c,v 1.13 2003-05-28 20:14:00 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -13,12 +13,34 @@ extern u16 timer_sum_display;
 extern u16 timer_sum_serial;
 extern u16 timer_sum_adc;
 extern u16 timer_sum_stat;
+extern u16 timer_diff_min;
+extern u16 timer_diff_max;
 extern u16 why_job;
+
+
+
+#ifdef DEBUG_SERIAL
+extern u16 packet_in_fifo;
+extern u16 fifo_trn_depth;
+extern u16 packet_fifo_full;
+extern u16 fifo_trn_depth_max;
+extern u16 error_uart_depth;
+extern u16 error_send_serial;
+extern u16 length_sended_2_fifo_max;
+extern u16 length_sended_2_fifo_min;
+#endif //DEBUG_SERIAL
+
 
 unsigned int  stat_rcv_fifo_start;      /* stat receive buffer start index      */
 
 volatile unsigned int  stat_rcv_fifo_end;        /* stat receive  buffer end index        */
+
 u16 stat_buf[STAT_FIFO_RCV_LEN*SIZE_STAT];
+
+unsigned int  stat1_rcv_fifo_start;      /* stat receive buffer start index      */
+
+volatile unsigned int  stat1_rcv_fifo_end;        /* stat receive  buffer end index        */
+u16 stat1_buf[STAT_FIFO_RCV_LEN*SIZE_STAT];
 
 
 //ADC
@@ -196,6 +218,7 @@ interrupt[TIMERA0_VECTOR] void timer_a_0 (void)
 interrupt [TIMERA1_VECTOR] void Timer_A(void)
 {
 int temp_led;
+int temp_diff;
 u16*t_stat;
 HOLD_TIME_IRQ()
  temp_led=P1OUT;
@@ -224,6 +247,7 @@ HOLD_TIME_IRQ()
       else {error_adc=1;}
       break;
      }
+    _BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
     break;
    case  4://тактирование часов
      //в режиме SMCLK
@@ -232,6 +256,9 @@ HOLD_TIME_IRQ()
      //в режиме ACLK
      //32768/8=921600
      //прерывания 16 раз в секунду цикл равен 256
+    temp_diff=temp_hold-CCR2;
+    if (timer_diff_min>temp_diff) timer_diff_min=temp_diff;
+    if (timer_diff_max<temp_diff) timer_diff_max=temp_diff;
     switch(mode_timer){
      case 0: //(cчет таймера от ACLK)
       CCR2 += 256;
@@ -242,7 +269,7 @@ HOLD_TIME_IRQ()
      }
 	//сброс WatchDog
     WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
-    show_display(0x00);
+    show_display();
     update_display=1;
     sub_counter_timer++;  
     if (sub_counter_timer>15){
@@ -250,24 +277,28 @@ HOLD_TIME_IRQ()
      sub_counter_timer-=16;
      second_point^=0xFFFF;
       }
-   t_stat=&stat_buf[(stat_rcv_fifo_end & (STAT_FIFO_RCV_LEN-1))*SIZE_STAT];
-   *t_stat++=timer_sum;
-   timer_sum=0;
-   *t_stat++=timer_sum_int;
-   timer_sum_int=0;
-   *t_stat++=timer_sum_sleep;
-   timer_sum_sleep=0;
-   *t_stat++=timer_sum_display;
-   timer_sum_display=0;
-   *t_stat++=timer_sum_serial;
-   timer_sum_serial=0;
-   *t_stat++=timer_sum_adc;
-   timer_sum_adc=0;
-   *t_stat++=timer_sum_stat;
-   timer_sum_stat=0;
+    _BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
+    t_stat=&stat_buf[(stat_rcv_fifo_end & (STAT_FIFO_RCV_LEN-1))*SIZE_STAT];
+    *t_stat++=timer_sum;
+    timer_sum=0;
+    *t_stat++=timer_sum_int;
+    timer_sum_int=0;
+    *t_stat++=timer_sum_sleep;
+    timer_sum_sleep=0;
+    *t_stat++=timer_sum_display;
+    timer_sum_display=0;
+    *t_stat++=timer_sum_serial;
+    timer_sum_serial=0;
+    *t_stat++=timer_sum_adc;
+    timer_sum_adc=0;
+    *t_stat++=timer_sum_stat;
+    timer_sum_stat=0;
+    *t_stat++=timer_diff_min;
+    timer_diff_min=0xFF;
+    *t_stat++=timer_diff_max;
+    timer_diff_max=0;
 
-
-   stat_rcv_fifo_end++;
+    stat_rcv_fifo_end++;
 
     break; //тактирование часов
 
@@ -284,19 +315,42 @@ HOLD_TIME_IRQ()
      ADC12CTL0 |= ADC12SC;                 // Start conversion
      TACTL|=MC_2;	//запускаем Timer A mode control: 2 - Continous up
      }
+    t_stat=&stat1_buf[(stat1_rcv_fifo_end & (STAT1_FIFO_RCV_LEN-1))*SIZE_STAT1];
+    *t_stat++=packet_in_fifo;
+
+    *t_stat++=fifo_trn_depth_max;
+    fifo_trn_depth_max=0;
+
+    *t_stat++=packet_fifo_full;
+    packet_fifo_full=0;
+
+    *t_stat++=error_uart_depth;
+    error_uart_depth=0;
+
+    *t_stat++=error_send_serial;
+    error_send_serial=0;
+
+    *t_stat++=length_sended_2_fifo_max;
+    length_sended_2_fifo_max=0;
+
+    *t_stat++=length_sended_2_fifo_min;
+    length_sended_2_fifo_min=0xFFF;
+
+    stat1_rcv_fifo_end++;
+
+
    break;      
             
  }
 // P1OUT &= ~0x01;                     // Reset P1.0 LED off
  P1OUT = temp_led;                     // return led state
- _BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
 SUM_TIME_IRQ();
 }
 
 interrupt[WDT_VECTOR] void wd_int (void)
 {
  _BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
- show_display(0x00);
+ show_display();
  counter_timer++;
  if (counter_timer>3){
   GlobalTime++;
@@ -450,7 +504,7 @@ void init_spi1_master(int regim){
 
 
 //высылает displ по SPI в индикатор
-void show_display(int regim){
+void show_display(void){
 int x,y;
 u16 data;
  invert^=0xFFFF;

@@ -1,4 +1,4 @@
-// $Id: uart.c,v 1.15 2003-05-28 16:47:16 peter Exp $
+// $Id: uart.c,v 1.16 2003-05-28 20:14:00 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -17,18 +17,23 @@ extern u16 why_job;
 
 extern u16 stat_buf[STAT_FIFO_RCV_LEN*SIZE_STAT];
 extern unsigned int  stat_rcv_fifo_start;      /* stat receive buffer start index      */
-
 extern volatile unsigned int  stat_rcv_fifo_end;        /* stat receive  buffer end index        */
+
+extern u16 stat1_buf[STAT_FIFO_RCV_LEN*SIZE_STAT];
+extern unsigned int  stat1_rcv_fifo_start;      /* stat receive buffer start index      */
+extern volatile unsigned int  stat1_rcv_fifo_end;        /* stat receive  buffer end index        */
 
 
 #ifdef DEBUG_SERIAL
-s16 packet_in_fifo;
-s16 fifo_trn_depth;
-s16 packet_fifo_full;
-s16 fifo_trn_depth_max;
-s16 error_uart_depth;
-s16 error_send_serial;
-s16 length_sended_2_fifo;
+u16 packet_in_fifo;
+u16 fifo_trn_depth;
+u16 packet_fifo_full;
+u16 fifo_trn_depth_max;
+u16 error_uart_depth;
+u16 error_send_serial;
+u16 length_sended_2_fifo;
+u16 length_sended_2_fifo_max;
+u16 length_sended_2_fifo_min;
 #endif //DEBUG_SERIAL
 
 
@@ -70,7 +75,8 @@ _____
 0x05      пакет данных статистики
 */
 
-#define DATA5PACKET     20
+#define DATA5PACKET     24
+#define DATA6PACKET     20
 
 #define  MAXQUE 8		//длина очереди пакетов
 #define  MAXPACKETLEN	64	//максимальная длина одного пакета
@@ -218,7 +224,7 @@ return 1;
 //отправляем пакет со статистикой
 u16 put_packet_type5(void){
 int n;
-int x;
+//int x;
 int crc;
 int shift_fifo;
 //u16* t_p;
@@ -255,6 +261,41 @@ int shift_fifo;
 
 	//в справочном массиве указываем длину пакета
  queue[n].len=DATA5PACKET;
+ queue[n].busy=NOTSENDED;
+return 1;
+}
+u16 put_packet_type6(void){
+int n;
+//int x;
+int crc;
+int shift_fifo;
+	//захватываем свободный пакет
+ if ((n=hold_packet())==MAXQUE) return 0; //свободных пакетов нет
+ #ifdef DEBUG_SERIAL
+ packet_in_fifo++;
+ #endif //DEBUG_SERIAL
+ shift_fifo=(n+1)*MAXPACKETLEN;
+	//копируем туда данные для пакета
+ memcpy(&packets[shift_fifo-DATA6PACKET],&stat1_buf[(stat1_rcv_fifo_start & (STAT1_FIFO_RCV_LEN-1))*SIZE_STAT1],SIZE_STAT1*2);
+
+
+ stat1_rcv_fifo_start++;
+
+
+	//помещаем в пакет его длину (без завершающего EOFPACKET)
+ packets[shift_fifo-LENPACKET]=DATA6PACKET;
+	//помещаем (и увеличиваем) порядковый номер пакета
+ packets[shift_fifo-NUMPACKET]=counts_packet;
+ queue[n].numeric=counts_packet++;
+	//указываем тип пакета
+ packets[shift_fifo-TYPEPACKET]=0x06;
+	//подсчитываем и помещаем CRC пакета
+ crc=crc16(&packets[shift_fifo-DATA6PACKET],DATA6PACKET-2);
+ packets[shift_fifo-CRCPACKET]=crc>>8;
+ packets[shift_fifo-CRCPACKET+1]=crc;
+
+	//в справочном массиве указываем длину пакета
+ queue[n].len=DATA6PACKET;
  queue[n].busy=NOTSENDED;
 return 1;
 }
@@ -315,6 +356,10 @@ int x;
   queue[x].len=send_serial_massiv(&packets[(x+1)*MAXPACKETLEN-queue[x].len],queue[x].len);
   #ifdef DEBUG_SERIAL
   length_sended_2_fifo-=queue[x].len;
+  if (length_sended_2_fifo_max<length_sended_2_fifo)
+   length_sended_2_fifo_max=length_sended_2_fifo;
+  if (length_sended_2_fifo_min>length_sended_2_fifo)
+   length_sended_2_fifo_min=length_sended_2_fifo;
   //здесь необходимо поместить эти данные в fifo статистики
   #endif //DEBUG_SERIAL
 
@@ -444,11 +489,17 @@ HOLD_TIME_IRQ()
 #endif //STEND
 
   #ifdef DEBUG_SERIAL
-  if (fifo_trn_depth) error_uart_depth++;
+  if (fifo_trn_depth) {error_uart_depth++;fifo_trn_depth=0;}
   #endif
   }
  P1OUT = temp_led;                     // return led state
-SUM_TIME_IRQ();
+
+//для отладки
+//обязательно УБРАТЬ ЭТОТ АНТИСЛИП!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
+_BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
+//!!!!!!!!!!!!!!!!!!!!!!!
+
+SUM_TIME_IRQ_NOSLEEP();
 }
 interrupt[UART1RX_VECTOR] void usart0_rx (void)
 {
