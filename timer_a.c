@@ -1,13 +1,19 @@
-// $Id: timer_a.c,v 1.11 2003-05-26 16:39:57 peter Exp $
+// $Id: timer_a.c,v 1.12 2003-05-28 16:47:16 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
 
-extern u16 timer_sum_idle;
+extern u16 temp_hold;
+extern u16 timer_sum_sleep;
 extern u16 timer_sum_int;
 extern u16 timer_hold;
 extern u16 timer_sum;
 extern u16 sleep;
+extern u16 timer_sum_display;
+extern u16 timer_sum_serial;
+extern u16 timer_sum_adc;
+extern u16 timer_sum_stat;
+extern u16 why_job;
 
 unsigned int  stat_rcv_fifo_start;      /* stat receive buffer start index      */
 
@@ -209,7 +215,7 @@ HOLD_TIME_IRQ()
       //пока ничего не делаем
       break;
      case 1: //(счет таймера от SMCLK)
-      CCR1 += 4608;
+      CCR1 += (18432*3);
 //      ADC12CTL0 |= ADC12SC;                 // Start conversion
       if (end_adc_conversion){
        end_adc_conversion=0;
@@ -246,8 +252,21 @@ HOLD_TIME_IRQ()
       }
    t_stat=&stat_buf[(stat_rcv_fifo_end & (STAT_FIFO_RCV_LEN-1))*SIZE_STAT];
    *t_stat++=timer_sum;
+   timer_sum=0;
    *t_stat++=timer_sum_int;
-   *t_stat++=timer_sum_idle;
+   timer_sum_int=0;
+   *t_stat++=timer_sum_sleep;
+   timer_sum_sleep=0;
+   *t_stat++=timer_sum_display;
+   timer_sum_display=0;
+   *t_stat++=timer_sum_serial;
+   timer_sum_serial=0;
+   *t_stat++=timer_sum_adc;
+   timer_sum_adc=0;
+   *t_stat++=timer_sum_stat;
+   timer_sum_stat=0;
+
+
    stat_rcv_fifo_end++;
 
     break; //тактирование часов

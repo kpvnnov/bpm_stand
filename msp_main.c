@@ -1,5 +1,5 @@
 //********************************************************
-// $Id: msp_main.c,v 1.17 2003-05-26 16:39:57 peter Exp $
+// $Id: msp_main.c,v 1.18 2003-05-28 16:47:16 peter Exp $
 //********************************************************
 
 //#include <msp430x11x1.h>
@@ -7,11 +7,17 @@
 #include  <msp430x14x.h>
 #include "global.h"
 
+u16 temp_hold;
 u16 timer_hold;
 u16 timer_sum;
 u16 timer_sum_int;
-u16 timer_sum_idle;
+u16 timer_sum_sleep;
 u16 sleep;
+u16 timer_sum_display;
+u16 timer_sum_serial;
+u16 timer_sum_adc;
+u16 timer_sum_stat;
+u16 why_job;
 
 
 extern unsigned int  stat_rcv_fifo_start;      /* stat receive buffer start index      */
@@ -187,6 +193,8 @@ int run_LFXT1CLK( int mode){
 }
 
 void set_pin_directions(void){
+
+#ifdef CABLE
   P1DIR = 0xFF;                         // All P1.x outputs
   P1OUT = 0;                            // All P1.x reset
   P2DIR = 0xFF;                         // All P2.x outputs
@@ -210,7 +218,29 @@ void set_pin_directions(void){
   P6DIR = 0xFF;                         // All P6.x outputs
   P6OUT = 0;                            // All P6.x reset
   P6SEL = 0x0F;                         // Enable A/D channel inputs
+#endif //CABLE
+#ifdef STEND
+  P1DIR = BIT0+BIT1+BIT5+BIT6+BIT7;
+  P1OUT = 0;                            // All P1.x reset
 
+  P2DIR = BIT1+BIT3+BIT4+BIT5+BIT6+BIT7;
+  P2OUT = 0;                            // All P2.x reset
+
+  P3SEL |= BIT4+BIT5;	//USART0 select
+  P3DIR = 0xFF;                         // All P3.x outputs
+  P3OUT = 0;                            // All P3.x reset
+
+  P4DIR = BIT0+BIT1+BIT2+BIT3+BIT6+BIT7;
+  P4OUT = 0;                            // All P4.x reset
+
+  P5DIR = 0xFF;                         // All P5.x outputs
+  P5OUT = 0;                            // All P5.x reset
+  P5SEL = 0x70; 			// MCLK, SMCLK,ACLK на вывод
+
+  P6DIR = 0x00;                         // All P6.x inputs
+  P6OUT = 0;                            // All P6.x reset
+  P6SEL = 0xFF;                         // Enable A/D channel inputs
+#endif //STEND
 
 }
 int current_speed;
@@ -251,7 +281,7 @@ void main(void)
 { 
 int i;
 	// останавливаем watchdog
-// WDTCTL=WDTPW|WDTHOLD;  		// Stop WDT
+ WDTCTL=WDTPW|WDTHOLD;  		// Stop WDT
 
 	//сброс WatchDog
  WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
@@ -355,7 +385,7 @@ int i;
   switch_xt2();
   }
  init_adc();
- init_uart1();
+ init_uart();
  CCR2=TAR+0x100;	//workaround прерывани€ часового
 
   _EINT();                              // Enable interrupts
@@ -364,60 +394,90 @@ int i;
   {
 //    BCSCTL2|=SELM0|SELM1;
 //    _BIS_SR(CPUOFF);                 // входим в режим сп€чки
-    SUM_TIME();
+    P1OUT &= ~0x01;                     // Reset P1.0 LED off
+    SUM_TIME(0);//DISPLAY_JOB
+    _BIS_SR(CPUOFF+GIE);
+
+/*    why_job=DISPLAY_JOB;
     P1OUT |= 0x01;                      // Set P1.0 LED on
     //-----------------
     // работа с "дисплеем"
     //-----------------
     if (update_display){
      update_display=0;
-     tick_timer();
-     work_with_display();
+//     tick_timer();
+//     work_with_display();
      P1OUT &= ~0x01;                     // Reset P1.0 LED off
 //     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
      SUM_TIME();
+     _BIS_SR(CPUOFF+GIE);
+     why_job=SERIAL_JOB;
      P1OUT |= 0x01;                      // Set P1.0 LED on
      }
-
-    //-----------------
-    // работа с последовательным портом
-    //-----------------
-    if (packet_in_fifo&&(fifo_trn_depth<(SERIAL_FIFO_TRN_LEN/2))){
-     work_with_serial();
+    else{
      P1OUT &= ~0x01;                     // Reset P1.0 LED off
-//     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
      SUM_TIME();
+     _BIS_SR(CPUOFF+GIE);
+     why_job=SERIAL_JOB;
      P1OUT |= 0x01;                      // Set P1.0 LED on
      }
+*/
 
-    //-----------------
+//     P1OUT &= ~0x01;                     // Reset P1.0 LED off
+     SUM_TIME(ADC_JOB);
+     _BIS_SR(CPUOFF+GIE);
+     P1OUT |= 0x01;                      // Set P1.0 LED on
+
 
     //-----------------
     // работа с данными из ј÷ѕ
     //-----------------
-    if (adc_rcv_fifo_start!=adc_rcv_fifo_end){
-     work_with_adc_put();
-     P1OUT &= ~0x01;                     // Reset P1.0 LED off
+    while(adc_rcv_fifo_start!=adc_rcv_fifo_end){
+     if (work_with_adc_put()==0) break;
+//     P1OUT &= ~0x01;                     // Reset P1.0 LED off
 //     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
-     SUM_TIME();
-     P1OUT |= 0x01;                      // Set P1.0 LED on
+//     SUM_TIME();
+//     _BIS_SR(CPUOFF+GIE);
+//     P1OUT |= 0x01;                      // Set P1.0 LED on
      }
+    P1OUT &= ~0x01;                     // Reset P1.0 LED off
+    SUM_TIME(STAT_JOB);
+    _BIS_SR(GIE);
     //-----------------
+    SUM_TIME(0);
+    _BIS_SR(CPUOFF+GIE);
 
 
     //-----------------
     // работа с данными статистики
     //-----------------
-    if (stat_rcv_fifo_start!=stat_rcv_fifo_end){
-     put_packet_type5();
-     P1OUT &= ~0x01;                     // Reset P1.0 LED off
+    while (stat_rcv_fifo_start!=stat_rcv_fifo_end){
+     if (put_packet_type5()==0) break;
+//     P1OUT &= ~0x01;                     // Reset P1.0 LED off
 //     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
-     SUM_TIME();
-     P1OUT |= 0x01;                      // Set P1.0 LED on
+//     SUM_TIME();
+//     _BIS_SR(CPUOFF+GIE);
+//     P1OUT |= 0x01;                      // Set P1.0 LED on
      }
+    P1OUT &= ~0x01;                     // Reset P1.0 LED off
+    SUM_TIME(SERIAL_JOB);
+    _BIS_SR(CPUOFF+GIE);
     //-----------------
 
+
+    //-----------------
+    // работа с последовательным портом
+    //-----------------
+    while(fifo_trn_depth<(SERIAL_FIFO_TRN_LEN/2)){
+     if (packet_in_fifo==0) break;
+      work_with_serial();
+     }
     P1OUT &= ~0x01;                     // Reset P1.0 LED off
+    SUM_TIME(0);
+    _BIS_SR(CPUOFF+GIE);
+    //-----------------
+
+
   }
 
 }

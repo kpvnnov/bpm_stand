@@ -1,13 +1,19 @@
-// $Id: uart.c,v 1.14 2003-05-26 16:39:57 peter Exp $
+// $Id: uart.c,v 1.15 2003-05-28 16:47:16 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
 
-extern u16 timer_sum_idle;
+extern u16 temp_hold;
+extern u16 timer_sum_sleep;
 extern u16 timer_sum_int;
 extern u16 timer_hold;
 extern u16 timer_sum;
 extern u16 sleep;
+extern u16 timer_sum_display;
+extern u16 timer_sum_serial;
+extern u16 timer_sum_adc;
+extern u16 timer_sum_stat;
+extern u16 why_job;
 
 extern u16 stat_buf[STAT_FIFO_RCV_LEN*SIZE_STAT];
 extern unsigned int  stat_rcv_fifo_start;      /* stat receive buffer start index      */
@@ -64,7 +70,7 @@ _____
 0x05      пакет данных статистики
 */
 
-#define DATA5PACKET     18
+#define DATA5PACKET     20
 
 #define  MAXQUE 8		//длина очереди пакетов
 #define  MAXPACKETLEN	64	//максимальная длина одного пакета
@@ -210,13 +216,13 @@ u16* t_p;
 return 1;
 }
 //отправляем пакет со статистикой
-u8 put_packet_type5(void){
+u16 put_packet_type5(void){
 int n;
 int x;
 int crc;
 int shift_fifo;
-u16* t_p;
-u16* t_s;
+//u16* t_p;
+//u16* t_s;
 	//захватываем свободный пакет
  if ((n=hold_packet())==MAXQUE) return 0; //свободных пакетов нет
  #ifdef DEBUG_SERIAL
@@ -224,18 +230,15 @@ u16* t_s;
  #endif //DEBUG_SERIAL
  shift_fifo=(n+1)*MAXPACKETLEN;
 	//копируем туда данные для пакета
- t_p=(u16*)&packets[shift_fifo-DATA5PACKET];
- t_s=(u16*)&stat_buf[(stat_rcv_fifo_start & (STAT_FIFO_RCV_LEN-1))*SIZE_STAT];
+// t_p=(u16*)&packets[shift_fifo-DATA5PACKET];
+// t_s=(u16*)&stat_buf[(stat_rcv_fifo_start & (STAT_FIFO_RCV_LEN-1))*SIZE_STAT];
 
- for(x=0;x<SIZE_STAT;x++)
-  *t_p=*t_s;
+// for(x=0;x<SIZE_STAT;x++)
+//  *t_p++=*t_s++;
+  memcpy(&packets[shift_fifo-DATA5PACKET],&stat_buf[(stat_rcv_fifo_start & (STAT_FIFO_RCV_LEN-1))*SIZE_STAT],SIZE_STAT*2);
+
+
  stat_rcv_fifo_start++;
-
-// *t_p++=results0[info];
-// *t_p++=results1[info];
-// *t_p++=results2[info];
-// *t_p++=results3[info];
-// *t_p++=results4[info];
 
 
 	//помещаем в пакет его длину (без завершающего EOFPACKET)
@@ -280,6 +283,7 @@ int shift_fifo;
  packets[shift_fifo-5]='4';
  packets[shift_fifo-4]='3';
  packets[shift_fifo-3]='2';
+ packets[shift_fifo-TYPEPACKET]=0x04;
  crc=crc16(&packets[shift_fifo-13],11);
  packets[shift_fifo-CRCPACKET]=crc>>8;
  packets[shift_fifo-CRCPACKET+1]=crc;
@@ -343,19 +347,13 @@ int x;
 
 //инициализация serial port 0
 void init_uart0(void){
-  UCTL0 = CHAR;                         // 8-bit character
-  UTCTL0 = SSEL0;                       // UCLK = ACLK
-  UBR00 = 0x45;                         // 8MHz 115200
-  UBR10 = 0x00;                         // 8MHz 115200
-  UMCTL0 = 0x00;                        // 8MHz 115200 modulation
-  ME1 |= UTXE0 + URXE0;                 // Enable USART0 TXD/RXD
-  IE1 |= URXIE0;                        // Enable USART0 RX interrupt
 
 }
 //инициализация serial port 1
-void init_uart1(void){
+void init_uart(void){
 int x;
 
+#ifdef CABLE
   UCTL1 = CHAR;                         // 8-bit character
   UTCTL1 = SSEL1;                       // UCLK = SMCLK
 //  UBR01 = 0x45;                         // 8Mhz/115200 - 69.44
@@ -377,25 +375,74 @@ int x;
   packet_in_fifo=0;
   packet_fifo_full=0;
  #endif
+#endif //CABLE
+#ifdef STEND
+
+  UCTL0 = CHAR;                         // 8-bit character
+  UTCTL0 = SSEL1;                       // UCLK = SMCLK
+//  UBR00 = 0x45;                         // 8Mhz/115200 - 69.44
+//  UBR10 = 0x00;                         //
+//  UMCTL0 = 0x2C;                        // modulation
+
+  UBR00 = 0x80;                         //7.372.800/19200 = 384 (0x180)
+  UBR10 = 0x01;                         //
+  UMCTL0 = 0x00;                        // no modulation
+
+  ME1 |= UTXE0 + URXE0;                 // Enable USART1 TXD/RXD
+  IE1 |= URXIE0;			// Enable USART1 RX+TX interrupt
+//+ UTXIE0;                
+  for (x=0;x<MAXQUE;x++) queue[x].busy=FREEPLACE;
+  last_sended_packet=MAXQUE;
+ #ifdef DEBUG_SERIAL
+  fifo_trn_depth_max=0;
+  fifo_trn_depth=0;
+  packet_in_fifo=0;
+  packet_fifo_full=0;
+ #endif
+#endif //STEND
 }
 
 
 
 
+#ifdef STEND
+//прерывание serial port 0
+interrupt[UART0TX_VECTOR] void usart0_tx (void)
+{
+#endif //STEND
 
+#ifdef CABLE
 //прерывание serial port 1
 interrupt[UART1TX_VECTOR] void usart1_tx (void)
 {
+#endif //CABLE
+
 int temp_led;
 HOLD_TIME_IRQ()
  temp_led=P1OUT;
+
+#ifdef CABLE
  TXBUF1 = asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
+#endif //CABLE
+
+#ifdef STEND
+ TXBUF0 = asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
+#endif //STEND
+
+
  #ifdef DEBUG_SERIAL
   if (fifo_trn_depth_max<fifo_trn_depth) fifo_trn_depth_max=fifo_trn_depth;
   fifo_trn_depth--;
  #endif
  if (asp_trn_fifo_start==asp_trn_fifo_end){ // если данных больше нет
+#ifdef CABLE
   IE2 &= ~UTXIE1;                          // то запрещаем прерыв. передачи
+#endif //CABLE
+
+#ifdef STEND
+  IE1 &= ~UTXIE0;                          // то запрещаем прерыв. передачи
+#endif //STEND
+
   #ifdef DEBUG_SERIAL
   if (fifo_trn_depth) error_uart_depth++;
   #endif
@@ -503,7 +550,12 @@ u16 t_start;
   if ( ((asp_trn_fifo_end&(SERIAL_FIFO_TRN_LEN-1))!=(asp_trn_fifo_start&(SERIAL_FIFO_TRN_LEN-1)))
 //&&
   )
+#ifdef CABLE
    IE2 |= UTXIE1;		// данные в фифошке есть - разрешаем прерывания передачи
+#endif //CABLE
+#ifdef STEND
+   IE1 |= UTXIE0;		// данные в фифошке есть - разрешаем прерывания передачи
+#endif //STEND
 
   enable_int_no_interrupt();
 // }while(len);
@@ -518,7 +570,13 @@ u8 write_asp_trn_fifo(u8 data_wr){
  #ifdef DEBUG_SERIAL
   fifo_trn_depth++;
  #endif
+#ifdef CABLE
  IE2 |= UTXIE1;		// данные в фифошке есть - разрешаем прерывания передачи
+#endif //CABLE
+#ifdef STEND
+ IE1 |= UTXIE0;		// данные в фифошке есть - разрешаем прерывания передачи
+#endif //STEND
+
  enable_int_no_interrupt();
  return 1;
 }

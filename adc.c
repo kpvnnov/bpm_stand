@@ -1,15 +1,19 @@
 
-// $Id: adc.c,v 1.9 2003-05-26 16:39:57 peter Exp $
+// $Id: adc.c,v 1.10 2003-05-28 16:47:16 peter Exp $
 #include  <msp430x14x.h>
 #include "global.h"
 
-extern u16 timer_sum_idle;
+extern u16 temp_hold;
+extern u16 timer_sum_sleep;
 extern u16 timer_sum_int;
 extern u16 timer_hold;
 extern u16 timer_sum;
 extern u16 sleep;
-
-
+extern u16 timer_sum_display;
+extern u16 timer_sum_serial;
+extern u16 timer_sum_adc;
+extern u16 timer_sum_stat;
+extern u16 why_job;
 
 unsigned int results0[ADC_FIFO_RCV_LEN];
 unsigned int results1[ADC_FIFO_RCV_LEN];
@@ -86,7 +90,7 @@ void init_adc(void){
 	//	101 VR+ = V REF+ 	and VR- = V REF- / Ve REF-
 	//	110 VR+ = Ve REF+ 	and VR- = V REF- / Ve REF-
 	//	111 VR+ = Ve REF+ 	and VR- = V REF- / Ve REF-
-  ADC12MCTL0 = INCH_0;           // ref+=Ve REF,  channel = A0
+  ADC12MCTL0 = INCH_0+SREF_2;           // ref+=Ve REF,  channel = A0
   ADC12MCTL1 = INCH_1+SREF_2;           // ref+=Ve REF+, channel = A1
   ADC12MCTL2 = INCH_2+SREF_2;           // ref+=AVcc, channel = A2    
   ADC12MCTL3 = INCH_3+SREF_2;           // ref+=AVcc, channel = A3, end seq.
@@ -102,18 +106,18 @@ void init_adc(void){
 }
 
 int counter;
-void work_with_adc_put(void){
+u16 work_with_adc_put(void){
 //int p;
 //проверку очереди выносим на верхний круг
 // if (adc_rcv_fifo_start==adc_rcv_fifo_end) return ;
  if (counter++>=1000){
   counter=0;
-  put_packet_type4();
-  put_packet_type4();
-  put_packet_type4();
-  put_packet_type4();
-  put_packet_type4();
-  put_packet_type4();
+//  put_packet_type4();
+//  put_packet_type4();
+//  put_packet_type4();
+//  put_packet_type4();
+//  put_packet_type4();
+//  put_packet_type4();
   }
 //  p=(adc_rcv_fifo_start & (ADC_FIFO_RCV_LEN-1))<<3;
 //отладка
@@ -121,7 +125,11 @@ void work_with_adc_put(void){
 //  results[p]='1';
 //  results[p]='2';
 //отладка
-  if (put_packet_type3(adc_rcv_fifo_start& (ADC_FIFO_RCV_LEN-1)))
-   adc_rcv_fifo_start++;
 
+  if (put_packet_type3(adc_rcv_fifo_start& (ADC_FIFO_RCV_LEN-1))){
+   adc_rcv_fifo_start++;
+   return 1;
+   }
+
+  return 0;
 }
