@@ -1,5 +1,5 @@
 //********************************************************
-// $Id: msp_main.c,v 1.14 2003-05-22 16:25:23 peter Exp $
+// $Id: msp_main.c,v 1.15 2003-05-22 20:00:26 peter Exp $
 //********************************************************
 
 //#include <msp430x11x1.h>
@@ -49,11 +49,12 @@ extern s16 fifo_trn_depth;
 
 
 
-
-
+#define ACLK_GO	500	//количество достаточных попыток запуска
 //возвращаем не ноль, если часовой кварц работает
 int test_run_LFXT1CLK(void){
-int c=10;
+int c=1000;	//общее количество попыток запуска ACLK
+int t=0;	//счетчик попыток "удачного бега"
+int last_att=9;
 int i;
 unsigned int to_compare,to_compare1;
  while(c){
@@ -88,7 +89,19 @@ unsigned int to_compare,to_compare1;
   else
    to_compare=0x2000+to_compare1-to_compare;
 	//если таймер бежит, то считаем, что кварц запустилс€
-  if (to_compare>15) break;
+  if (to_compare>16) t++; else t=0;
+	//сброс WatchDog
+  if (t>ACLK_GO) break;	//считаем, что часовой кварц запустилс€
+  WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
+  if ((t>>6)!=last_att){
+    last_att=t>>6;
+    symbl[3]=0x0A;	//'A'
+    symbl[2]=0x0C;	//'C'
+    symbl[1]=0x15;	//'L'
+    symbl[0]=last_att;	//"псевдономер" попытки выводим на эран
+    update_diplay();
+    }
+  if ((c&0x3F)==0)      show_display(0x00);
   c--;
   }
  return c;
@@ -121,7 +134,6 @@ int run_LFXT1CLK( int mode){
  if (!test_run_LFXT1CLK()){	//часовой не запустилс€
   return 0;
   }
-	// включаем источник основной частоты - LFXT1CLK
 	// Bit0, DCOR: The DCOR bit selects the resistor for injecting current into the
 	// dc generator. Based on this current, the oscillator operates if
 	// activated.
@@ -151,7 +163,7 @@ int run_LFXT1CLK( int mode){
 	// SELM = 2: Use the XT2CLK (x13x and x14x devices) or
 	// Use the LFXT1CLK (x11xx and x12xx devices)
 	// SELM = 3: Use the LFXT1CLK
-
+	// включаем источник основной частоты - LFXT1CLK
  BCSCTL2=(BCSCTL2&(~(DIVM0|DIVM1|DIVS0|DIVS1)))|SELM0|SELM1|SELS;
  if (mode&0x02) _BIS_SR(SCG0);
  return 1;
@@ -224,13 +236,9 @@ int i;
 	// останавливаем watchdog
 // WDTCTL=WDTPW|WDTHOLD;  		// Stop WDT
 
-	/* Watchdog mode -> reset after expired time */
-	/* WDT is clocked by fACLK (assumed 32KHz) */
-	// #define WDT_ARST_1000       (WDTPW+WDTCNTCL+WDTSSEL)                          
-	/* 1000ms  " */
- WDTCTL = WDT_ARST_1000;
- 	//сброс WatchDog
+	//сброс WatchDog
  WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
+
 	// конфигурируем ноги ввода вывода
  set_pin_directions();
 // run_full_speed=0;
@@ -258,9 +266,11 @@ int i;
 	//сброс WatchDog
      WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
 	//и начинаем этой ногой "мигать"
-     for (i = 20000; i>0; i--);           // Delay
+     for (i = 1000; i>0; i--);           // Delay
      P3OUT^=BIT6;
-     for (i = 2000; i>0; i--);           // Delay
+	//сброс WatchDog
+     WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
+     for (i = 40; i>0; i--);           // Delay
      P3OUT^=BIT6;
      show_display(0x00);
      }
@@ -269,7 +279,7 @@ int i;
  init_timer_a();
 	//переходим на работу от часового кварца
 	//если часовой кварц по каким-то причинам не запустилс€
- if (!run_LFXT1CLK(0x02)){
+ if (!run_LFXT1CLK(0x0)){
 	//то считаем пока это аварийным режимом
 	//выключаем ноги от блока USART1
     P3SEL &= ~0xC0;                        // P3.6,7 = USART1 option select
@@ -282,17 +292,26 @@ int i;
 	//сброс WatchDog
      WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
 	//и начинаем этой ногой "мигать"
-     for (i = 20000; i>0; i--);           // Delay
+     for (i = 1000; i>0; i--);           // Delay
 	//сброс WatchDog
      WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
      P3OUT^=BIT6;
-     for (i = 20000; i>0; i--);           // Delay
+     for (i = 1000; i>0; i--);           // Delay
      P3OUT^=BIT6;
      show_display(0x00);
      }
   }
 // init_wdt();
 
+	/* Watchdog mode -> reset after expired time */
+	/* WDT is clocked by fACLK (assumed 32KHz) */
+	// #define WDT_ARST_1000       (WDTPW+WDTCNTCL+WDTSSEL)                          
+	/* 1000ms  " */
+ WDTCTL = WDT_ARST_1000;
+ 	//сброс WatchDog
+ WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
+
+ _BIS_SR(SCG0);
 	//переходим на работу от второго кварца
  if (current_speed==0 && power_good() ){
 	//если второй кварц по каким-то причинам не запустилс€
@@ -326,21 +345,40 @@ int i;
 //    BCSCTL2|=SELM0|SELM1;
     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
     P1OUT |= 0x01;                      // Set P1.0 LED on
-    tick_timer();
-    work_with_display();
+
+    //-----------------
+    // работа с "дисплеем"
+    //-----------------
+    if (update_display){
+     update_display=0;
+     tick_timer();
+     work_with_display();
+     P1OUT &= ~0x01;                     // Reset P1.0 LED off
+     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
+     P1OUT |= 0x01;                      // Set P1.0 LED on
+     }
 
     //-----------------
     // работа с последовательным портом
     //-----------------
-    if (packet_in_fifo&&(fifo_trn_depth<(SERIAL_FIFO_TRN_LEN/2)))
+    if (packet_in_fifo&&(fifo_trn_depth<(SERIAL_FIFO_TRN_LEN/2))){
      work_with_serial();
+     P1OUT &= ~0x01;                     // Reset P1.0 LED off
+     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
+     P1OUT |= 0x01;                      // Set P1.0 LED on
+     }
+
     //-----------------
 
     //-----------------
     // работа с данными из ј÷ѕ
     //-----------------
-    if (adc_rcv_fifo_start!=adc_rcv_fifo_end) 
+    if (adc_rcv_fifo_start!=adc_rcv_fifo_end){
      work_with_adc_put();
+     P1OUT &= ~0x01;                     // Reset P1.0 LED off
+     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
+     P1OUT |= 0x01;                      // Set P1.0 LED on
+     }
     //-----------------
 
     P1OUT &= ~0x01;                     // Reset P1.0 LED off

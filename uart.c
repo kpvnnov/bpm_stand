@@ -1,4 +1,4 @@
-// $Id: uart.c,v 1.11 2003-05-22 16:25:23 peter Exp $
+// $Id: uart.c,v 1.12 2003-05-22 20:00:27 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -12,6 +12,7 @@ s16 packet_fifo_full;
 s16 fifo_trn_depth_max;
 s16 error_uart_depth;
 s16 error_send_serial;
+s16 length_sended_2_fifo;
 #endif //DEBUG_SERIAL
 
 
@@ -25,7 +26,7 @@ _____
            пакета
 1          тип
            пакета
-1          длина пакета
+1          длина пакета (без маркера конца пакета)
 2          CRC
 1          x7E - маркер пакета
 
@@ -220,29 +221,37 @@ int x;
  if (last_sended_packet<MAXQUE){
   x=last_sended_packet;
 	//посылаем (сколько в фифошку поместится) пакет
+  #ifdef DEBUG_SERIAL
+  length_sended_2_fifo=queue[x].len;
+  #endif //DEBUG_SERIAL
   queue[x].len=send_serial_massiv(&packets[(x+1)*MAXPACKETLEN-queue[x].len],queue[x].len);
+  #ifdef DEBUG_SERIAL
+  length_sended_2_fifo-=queue[x].len;
+  //здесь необходимо поместить эти данные в fifo статистики
+  #endif //DEBUG_SERIAL
+
 	//если все отправили
   if (queue[x].len==0){
 	//высылаем маркер конца пакета
    while (write_asp_trn_fifo(EOFPACKET)==0) ;
 	//помечаем пакет отмеченным или ожидающем подтверждения
-	//отладка   queue[x].busy=WAIT_ACK;
+   //отладка   queue[x].busy=WAIT_ACK;
 
-    //для отладки
-    queue[x].busy=FREEPLACE; 	
-    #ifdef DEBUG_SERIAL
-    packet_in_fifo--;
-    #endif //DEBUG_SERIAL
-    //для отладки
+   //для отладки
+   queue[x].busy=FREEPLACE; 	
+   #ifdef DEBUG_SERIAL
+   packet_in_fifo--;
+   #endif //DEBUG_SERIAL
+   //для отладки
 
 	//ищем следующий пакет в очереди на отправку
-    while((++last_sended_packet)<MAXQUE){
-     switch(queue[last_sended_packet].busy){
+   while((++last_sended_packet)<MAXQUE){
+    switch(queue[last_sended_packet].busy){
 	//найден неотправленный пакет
-      case NOTSENDED:
-       return;
-      }
-     }//elihw дошли до конца очереди - пакетов на отправку нет
+     case NOTSENDED:
+      return;
+     }
+    }//elihw дошли до конца очереди - пакетов на отправку нет
    }//fi - текущий пакет отправлен еще не до конца
   }//fi - пока нет пакетов для отправки
 }
@@ -407,10 +416,6 @@ u16 t_start;
   )
    IE2 |= UTXIE1;		// данные в фифошке есть - разрешаем прерывания передачи
 
-//        ((IFG2 & UTXIFG1) != 0)  ){	//прерывания передачи запрещены?
-
-//   TXBUF1 = asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
-//   }
   enable_int_no_interrupt();
 // }while(len);
 return len;

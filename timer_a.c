@@ -1,4 +1,4 @@
-// $Id: timer_a.c,v 1.8 2003-05-22 16:25:23 peter Exp $
+// $Id: timer_a.c,v 1.9 2003-05-22 20:00:27 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -173,6 +173,7 @@ interrupt[TIMERA0_VECTOR] void timer_a_0 (void)
 	//сброс WatchDog
    WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
    counter_timer++;
+   update_display=1;
    if (counter_timer>3){
     GlobalTime++;
     counter_timer-=4;
@@ -202,6 +203,7 @@ interrupt[TIMERA0_VECTOR] void timer_a_0 (void)
 	//сброс WatchDog
     WDTCTL = (WDTCTL&0x00FF)+WDTPW+WDTCNTCL;
     refresh_timer-=140;
+    update_display=1;
     }
    refresh_timer++;
    sub_counter_timer++;  // 1400 Гц (делитель 5266)
@@ -379,6 +381,11 @@ for (x=0;x<8;x++){
  }
 }
 
+
+#define cs_on_display()	 P4OUT|=BIT7
+#define cs_off_display() P4OUT&=~BIT7
+
+
 //высылает displ по SPI в индикатор
 void show_display(int regim){
 int x;
@@ -443,12 +450,6 @@ void update_diplay(void){
  displ[0]=symbols[symbl[3]];
 }
 
-void cs_on_display(void){
-P4OUT|=BIT7;
-}
-void cs_off_display(void){
-P4OUT&=~BIT7;
-}
 
 
 

@@ -1,4 +1,4 @@
-//$Id: global.h,v 1.9 2003-05-22 16:25:23 peter Exp $
+//$Id: global.h,v 1.10 2003-05-22 20:00:26 peter Exp $
 
 
 #define DEBUG_SERIAL
@@ -49,8 +49,8 @@ void redraw_display_second(int force);
 void redraw_display_minutes(int force);
 void redraw_display_voltage(int force);
 void redraw_display_celciy(int force);
-void cs_on_display(void);
-void cs_off_display(void);
+//void cs_on_display(void);
+//void cs_off_display(void);
 int power_good(void);
 void work_with_display(void);
 void work_with_serial(void);
