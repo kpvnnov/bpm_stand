@@ -1,26 +1,6 @@
-//******************************************************************************
-// $Id: msp_main.c,v 1.11 2003-05-13 15:11:43 peter Exp $
-//  MSP-FET430X110 Demo - Demonstrate LPM3, WDT Interrupt   
-//
-//  Description; This program operates MSP430 normally in LPM3, pulsing P1.0 
-//  at 4 second intervals. WDT ISR used to wake-up system. All I/O configured 
-//  as low outputs to eliminate floating inputs. Current consumption does 
-//  increase when LED is powered on P1.0. Demo for measuring LPM3 current. 
-//  //*External watch crystal installed on XIN XOUT is required for ACLK*//	  
-//
-//
-//           MSP430F1121
-//         ---------------
-//     /|\|            XIN|-  
-//      | |               | 32kHz
-//      --|RST        XOUT|-
-//        |               |
-//        |           P1.0|-->LED
-//    
-//  M. Buccini
-//  Texas Instruments, Inc
-//  January 2002
-//******************************************************************************
+//********************************************************
+// $Id: msp_main.c,v 1.12 2003-05-16 19:29:08 peter Exp $
+//********************************************************
 
 //#include <msp430x11x1.h>
 //#include  <msp430x13x.h>

@@ -1,4 +1,4 @@
-// $Id: uart.c,v 1.7 2003-05-16 14:57:05 peter Exp $
+// $Id: uart.c,v 1.8 2003-05-16 19:29:08 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -30,15 +30,15 @@ _____
 0x03      пакет данных ЭКГ
 */
 
-#define  SERIAL_FIFO_RCV_LEN  64           /* size of fifo serial buffer   */
-#define  SERIAL_FIFO_TRN_LEN  32           /* size of fifo serial buffer   */
+#define  SERIAL_FIFO_RCV_LEN  64           /* size of receive fifo serial buffer   */
+#define  SERIAL_FIFO_TRN_LEN  64           /* size of transmit fifo serial buffer   */
 #define  MAXQUE 8		//длина очереди пакетов
 #define  MAXPACKETLEN	64	//максимальная длина одного пакета
-#define  CRCPACKET	3	//смещение (с конца) положения в пакете CRC
-#define  LENPACKET	4	//смещение (с конца) положения в пакете длины пакета
-#define  TYPEPACKET     5	//смещение (с конца) положения в пакете типа пакета
-#define  NUMPACKET	6	//смещение (с конца) положения в пакете номера пакета
-#define  DATA3PACKET    18	//смещение (с конца) положения в пакете размещения данных
+#define  CRCPACKET	2	//смещение (с конца) положения в пакете CRC
+#define  LENPACKET	3	//смещение (с конца) положения в пакете длины пакета
+#define  TYPEPACKET     4	//смещение (с конца) положения в пакете типа пакета
+#define  NUMPACKET	5	//смещение (с конца) положения в пакете номера пакета
+#define  DATA3PACKET    17	//смещение (с конца) положения в пакете размещения данных
 #define  SIZEDATA3	12	//количество байт данных в пакете типа 3
 #define  EOFPACKET	0x7E	//код признака конца кадра
 volatile unsigned int  asp_trn_fifo_start;      /* serial transmit buffer start index      */
@@ -117,7 +117,6 @@ const unsigned int  CrcTable16[256]={
     0x7c26,  0x6c07,  0x5c64,  0x4c45,  0x3ca2,  0x2c83,  0x1ce0,  0x0cc1,
     0xef1f,  0xff3e,  0xcf5d,  0xdf7c,  0xaf9b,  0xbfba,  0x8fd9,  0x9ff8,
     0x6e17,  0x7e36,  0x4e55,  0x5e74,  0x2e93,  0x3eb2,  0x0ed1,  0x1ef0};
-//0x6e17,  0x7e36,  0x4e55,  0x5e74,  0x2e93,  0x3eb2,  0x0ed1,  0x1ef0
 
 /*
 unsigned int  update_crc_16(unsigned char octet,unsigned int crc)
@@ -139,43 +138,23 @@ return crc;
 u8 put_packet_type3(u8 *info){
 int n;
 int crc;
- while ((n=hold_packet())==MAXQUE) ; //захватываем свободный пакет
- memcpy(&packets[(n+1)*MAXPACKETLEN-DATA3PACKET],info,SIZEDATA3); //копируем туда данные для пакета
+	//захватываем свободный пакет
+ while ((n=hold_packet())==MAXQUE) ; 
+	//копируем туда данные для пакета
+ memcpy(&packets[(n+1)*MAXPACKETLEN-DATA3PACKET],info,SIZEDATA3); 
+	//помещаем в пакет его длину (без завершающего EOFPACKET)
  packets[(n+1)*MAXPACKETLEN-LENPACKET]=DATA3PACKET;
- packets[(n+1)*MAXPACKETLEN-NUMPACKET]=counts_packet++;
+	//помещаем (и увеличиваем) порядковый номер пакета
+ packets[(n+1)*MAXPACKETLEN-NUMPACKET]=counts_packet;
+ queue[n].numeric=counts_packet++;
+	//указываем тип пакета
  packets[(n+1)*MAXPACKETLEN-TYPEPACKET]=0x03;
-// packets[(n+1)*MAXPACKETLEN-CRCPACKET]=0xFF;
-// packets[(n+1)*MAXPACKETLEN-CRCPACKET+1]=0xFF;
+	//подсчитываем и помещаем CRC пакета
  crc=crc16(&packets[(n+1)*MAXPACKETLEN-DATA3PACKET],DATA3PACKET-3);
  packets[(n+1)*MAXPACKETLEN-CRCPACKET]=crc>>8;
  packets[(n+1)*MAXPACKETLEN-CRCPACKET+1]=crc;
 
-//отладка
-// packets[(n+1)*MAXPACKETLEN-19]='K';
-// packets[(n+1)*MAXPACKETLEN-18]='J';
-//  packets[(n+1)*MAXPACKETLEN-17]='H';
-//  packets[(n+1)*MAXPACKETLEN-16]='G';
-//  packets[(n+1)*MAXPACKETLEN-15]='F';
-//  packets[(n+1)*MAXPACKETLEN-14]='D';
-//  packets[(n+1)*MAXPACKETLEN-13]='S';
-//  packets[(n+1)*MAXPACKETLEN-12]='A';
-//  packets[(n+1)*MAXPACKETLEN-11]='P';
-//  packets[(n+1)*MAXPACKETLEN-10]='O';
-//  packets[(n+1)*MAXPACKETLEN-9]='I';
-//  packets[(n+1)*MAXPACKETLEN-8]='U';
-//  packets[(n+1)*MAXPACKETLEN-7]='Y';
-//  packets[(n+1)*MAXPACKETLEN-6]='T';
-//  packets[(n+1)*MAXPACKETLEN-5]='R';
-//  packets[(n+1)*MAXPACKETLEN-4]='E';
-//  packets[(n+1)*MAXPACKETLEN-3]='W';
-//  packets[(n+1)*MAXPACKETLEN-2]='Q';
-//
-
-
-
-
- packets[(n+1)*MAXPACKETLEN-1]=EOFPACKET;
- queue[n].numeric=packets[(n+1)*MAXPACKETLEN-NUMPACKET];
+	//в справочном массиве указываем длину пакета
  queue[n].len=DATA3PACKET;
  queue[n].busy=NOTSENDED;
 return 1;
@@ -193,38 +172,36 @@ int crc;
  packets[(n+1)*MAXPACKETLEN-5]='4';
  packets[(n+1)*MAXPACKETLEN-4]='3';
  packets[(n+1)*MAXPACKETLEN-3]='2';
- packets[(n+1)*MAXPACKETLEN-2]='1';
  crc=crc16(&packets[(n+1)*MAXPACKETLEN-13],10);
  packets[(n+1)*MAXPACKETLEN-CRCPACKET]=crc>>8;
  packets[(n+1)*MAXPACKETLEN-CRCPACKET+1]=crc;
- packets[(n+1)*MAXPACKETLEN-1]=EOFPACKET;
- queue[n].len=13;
+ queue[n].len=12;
  queue[n].busy=NOTSENDED;
 return 1;
 }
 
-void work_with_serial(void){
- work_serial_transmit();
-}
 
-void send_full_massiv(u8* data,u16 len){
-u16 ostatok;
- while ( (ostatok=send_serial_massiv(data,len))!=0) {
-  data+=(len-ostatok);
-  len=ostatok;
-  }
-}
 
 //u8 test[4]={'0','1','2','3'};
-void work_serial_transmit(void){
+void work_with_serial(void){
+u16 ostatok;
 int x;
+u8* data;
+u16 len;
 for (x=0;x<MAXQUE;x++){
  switch(queue[x].busy){
   case NOTSENDED:
 //отладка   queue[x].busy=WAIT_ACK;
    queue[x].busy=FREEPLACE; 	//для отладки
-   send_full_massiv(&packets[(x+1)*MAXPACKETLEN-queue[x].len],queue[x].len);
-//отладка      send_full_massiv(test,4);
+   data=&packets[(x+1)*MAXPACKETLEN-queue[x].len];
+   len=queue[x].len;
+	//посылаем (с ожиданием) весь пакет
+   while ( (ostatok=send_serial_massiv(data,len))!=0) {
+    data+=(len-ostatok);
+    len=ostatok;
+    }
+	//высылаем маркер конца пакета
+   while (write_asp_trn_fifo(EOFPACKET)==0) ;
    return;
 //   break;
   }
@@ -232,6 +209,7 @@ for (x=0;x<MAXQUE;x++){
 }
 
 
+//инициализация serial port 0
 void init_uart0(void){
   UCTL0 = CHAR;                         // 8-bit character
   UTCTL0 = SSEL0;                       // UCLK = ACLK
@@ -242,6 +220,7 @@ void init_uart0(void){
   IE1 |= URXIE0;                        // Enable USART0 RX interrupt
 
 }
+//инициализация serial port 1
 void init_uart1(void){
 int x;
 
@@ -266,6 +245,7 @@ int x;
 
 
 
+//прерывание serial port 1
 interrupt[UART1TX_VECTOR] void usart1_tx (void)
 {
  TXBUF1 = asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
@@ -307,12 +287,13 @@ interrupt[UART1RX_VECTOR] void usart0_rx (void)
 //  portIOSR=rDIOSR;
 
 }
+//чтение буфера приема
 u16 read_asp_rcv_fifo(void){ 
  if (asp_rcv_fifo_start==asp_rcv_fifo_end) return 0;
  return (asp_rcv_fifo_buf[asp_rcv_fifo_start++ & (SERIAL_FIFO_RCV_LEN-1)]|0x0100);
 }
 
-
+u16 escape_sym;
 u16 send_serial_massiv(u8* data,u16 len){
 u16 counter;
 u16 counter1;
@@ -333,14 +314,22 @@ u16 t_start;
   if (counter>len) counter=len;
   counter1=counter;
   while(counter){
-   asp_trn_fifo_buf[t_end++]=*data++;
+   if (escape_sym){
+    escape_sym=0;
+    asp_trn_fifo_buf[t_end++]=(*data++)^0x40;
+    }
+   else
+    if (*data==EOFPACKET||*data==ESCAPE){
+     escape_sym=1;
+     asp_trn_fifo_buf[t_end++]=ESCAPE;
+     len++;
+     }
+    else
+     asp_trn_fifo_buf[t_end++]=*data++;
    counter--;
    }
-//  memcpy(&asp_trn_fifo_buf[t_end],data,counter);
   len-=counter1;
-//  len-=counter;
   asp_trn_fifo_end+=counter1;
-//  asp_trn_fifo_end+=counter;
   disable_int_no_interrupt();
   //если фифошка не пустая и прерывания запрещены, то разрешаем их
   if ( ((asp_trn_fifo_end&(SERIAL_FIFO_TRN_LEN-1))!=(asp_trn_fifo_start&(SERIAL_FIFO_TRN_LEN-1)))
@@ -363,8 +352,6 @@ u8 write_asp_trn_fifo(u8 data_wr){
  disable_int_no_interrupt();
  asp_trn_fifo_buf[asp_trn_fifo_end++ & (SERIAL_FIFO_TRN_LEN-1)]=data_wr;
  IE2 |= UTXIE1;		// данные в фифошке есть - разрешаем прерывания передачи
-// if ((IFG2 & UTXIFG1) != 0)        // USART0 TX buffer ready?
-//  TXBUF1 = asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
  enable_int_no_interrupt();
  return 1;
 }
