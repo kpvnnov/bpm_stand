@@ -153,8 +153,10 @@ void cs_off_display(void){
 P4OUT&=~BIT7;
 }
 //высылает displ по SPI в индикатор
-void show_display(char invert){
+int invert;
+void show_display(void){
 int x;
+ invert^=0xFFFF;
  init_spi1_master();
  cs_on_display();
  for (x=0;x<4;x++){
@@ -209,6 +211,8 @@ time_in time_to_show;
 //это врем€ по гринвичу
 time_in GlobalTime=0;
 int counter_timer;
+int refresh_timer;
+int sub_counter_timer;
 
 void make_view_time(time_in to_show){
  struct tm_in decoded;
@@ -236,10 +240,6 @@ void redraw_display(void){
 }
 
 void tick_timer(void){
- if (counter_timer>3){
-  GlobalTime++;
-  counter_timer-=4;
-  }
  redraw_display();
 }
 
@@ -377,7 +377,7 @@ void init_timer_a(void){
  // 2 Negative Edge Capture is done with falling edge.
  // 3 Both Edges Capture is done with both rising and falling edges.
  CCTL0=CCIE;	// CCR0 interrupt enabled
- CCR0=32768/4; 
+ CCR0=32768/4; 	//8192=0x2000
  TACTL|=MC0;	// Start Timer_a in upmode
 }
 
@@ -389,8 +389,9 @@ void init_timer_a(void){
 //  - отключаем SMCLK (SCG1=1 если mode&0x04)
 // и возвращаем 1 (True) иначе продолжаем работать на внутреннем генераторе
 // и возвращаем 0 (False)
-int switch_to_LFXT1CLK( int mode){
+int run_LFXT1CLK( int mode){
 	//XTS = 0: The low-frequency oscillator is selected.
+ if (mode&0x04) _BIS_SR(SCG1);
  BCSCTL1&=~XTS;
 
  _BIC_SR(OSCOFF);			// ¬ключаем часовой кварц
@@ -407,13 +408,37 @@ int switch_to_LFXT1CLK( int mode){
 	// XT2Off = 1: the oscillator is off if it is not used for MCLK or SMCLK.
  BCSCTL1 = (BCSCTL1& (~(DIVA0|DIVA1))) | (mode&0x01 ? XT2OFF:0); 
 	// включаем источник основной частоты - LFXT1CLK
+	// Bit0, DCOR: The DCOR bit selects the resistor for injecting current into the
+	// dc generator. Based on this current, the oscillator operates if
+	// activated.
+	// DCOR = 0: Internal resistor on, the oscillator can operate. The failsafe
+	// mode is on.
+	// DCOR = 1: Internal resistor off, the current must be injected
+	// externally if the DCO output drives any clock using
+	// the DCOCLK.
+	// Bit1, Bit2: The selected source for SMCLK is divided by:
+	// DIVS.1 .. DIVS.0 DIVS = 0: 1
+	// DIVS = 1: 2
+	// DIVS = 2: 4
+	// DIVS = 3: 8
+	// Bit3, SELS: Selects the source for generating SMCLK:
+	// SELS = 0: Use the DCOCLK
+	// SELS = 1: Use the XT2CLK signal (in three-oscillator systems)
+	// or
+	// LFXT1CLK signal (in two-oscillator systems)
+	// Bit4, Bit5: The selected source for MCLK is divided by:
+	// DIVM.0 .. DIVM.1 DIVM = 0: 1
+	// DIVM = 1: 2
+	// DIVM = 2: 4
+	// DIVM = 3: 8
+	// Bit6, Bit7: Selects the source for generating MCLK:
 	// SELM.0 .. SELM.1 SELM = 0: Use the DCOCLK
 	// SELM = 1: Use the DCOCLK
 	// SELM = 2: Use the XT2CLK (x13x and x14x devices) or
-	//           Use the LFXT1CLK (x11xx and x12xx devices)
+	// Use the LFXT1CLK (x11xx and x12xx devices)
 	// SELM = 3: Use the LFXT1CLK
- BCSCTL2=SELM0|SELM1;
- if (mode&0x04) _BIS_SR(SCG1);
+
+ BCSCTL2=(BCSCTL2&(~(DIVM0|DIVM1|DIVS0|DIVS1)))|SELM0|SELM1|SELS;
  if (mode&0x02) _BIS_SR(SCG0);
  return 1;
 }
@@ -435,6 +460,11 @@ void set_pin_directions(void){
 }
 //если не 0, то запускаем€ на полной скорости
 int run_full_speed;
+int current_speed;
+// 0 - ACLK 1 - SMCLK
+int current_timer;
+//переключаемс€ на скоростной режим таймера
+int switch_speed_timer;
 
 int run_xt2(void){
 int i;
@@ -448,14 +478,17 @@ int count=10;
   if (count==0) break;
   }
   while ((IFG1 & OFIFG) != 0);          // OSCFault flag still set?                
+
+  if ((IFG1 & OFIFG)==0){
+   BCSCTL2 = (BCSCTL2&(~SELM0))|SELM1;   // MCLK = XT2 (safe)
+   current_speed=1;
+   }
   return count;
 }
 
 
-void switch_xt2_and_synchronize(void){
-  if ((IFG1 & OFIFG)==0)
-   BCSCTL2 = (BCSCTL2&(~SELM0))|SELM1;   // MCLK = XT2 (safe)
-
+void switch_xt2(void){
+switch_speed_timer=1;
 }
 
 void main(void)
@@ -464,38 +497,83 @@ void main(void)
  WDTCTL=WDTPW|WDTHOLD;  		// Stop WDT
 	// конфигурируем ноги ввода вывода
  set_pin_directions();
- run_fuul_speed=0;
+ run_full_speed=0;
+ current_speed=0;
+ current_timer=0;
+ switch_speed_timer=0;
+ invert=0;
 	//переходим на работу от часового кварца
- switch_to_LFXT1CLK(0x06);
- init_wdt();
+ run_LFXT1CLK(0x02);
+// init_wdt();
+
+//запускаем таймер A и часы от него
+ init_timer_a();
 
 
   _EINT();                              // Enable interrupts
   
   while(1)
   {
+//    BCSCTL2|=SELM0|SELM1;
     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
     P1OUT |= 0x01;                      // Set P1.0 LED on
     tick_timer();
     P1OUT &= ~0x01;                     // Reset P1.0 LED off
-    if (run_full_speed & run_xt2()){
-     switch_xt2_and_synchronize();
+    if (current_speed==0 && run_full_speed && run_xt2()){
+     switch_xt2();
      }
   }
 
 }
 
+int power_good(void){
+return 1;
+}
+
 interrupt[TIMERA0_VECTOR] void timer_a_0 (void)
 {
+ if (current_timer){
+//  BCSCTL2=(BCSCTL2&(~(SELM0)))|SELM1;
+  	//счет таймера от SMCLK
+  if (refresh_timer>139){
+   show_display();
+   refresh_timer-=140;
+   }
+  refresh_timer++;
+  sub_counter_timer++;  // 1400 √ц (делитель 5266)
+  if (sub_counter_timer>1399){
+   GlobalTime++;
+   sub_counter_timer-=1400;
+   }
+
+  }
+ else{
+  	//счет таймера от ACLK
+  if (switch_speed_timer){
+   current_timer=1;
+   TACTL&=~(MC0|MC1); //stop
+   TACTL=ID_0|TASSEL_2;
+   CCR0=5266;	 //1400,07595898 √ц 0x1492
+   TACTL|=MC_1;
+   }
+  counter_timer++;
+  show_display();
+  if (counter_timer>3){
+   GlobalTime++;
+   counter_timer-=4;
+   }
+  if (power_good()) run_full_speed=1;
+  }
  _BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
- counter_timer++;
- show_display(counter_timer&0x01);
 
 } 
 interrupt[WDT_VECTOR] void wd_int (void)
 {
  _BIC_SR_IRQ(CPUOFF);             // Clear CPUOFF bits from 0(SR)
+ show_display();
  counter_timer++;
- show_display(counter_timer&0x01);
- if (power_good()) run_full_speed=1;
+ if (counter_timer>3){
+  GlobalTime++;
+  counter_timer-=4;
+  }
 } 
