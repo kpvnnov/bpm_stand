@@ -1,5 +1,5 @@
 //******************************************************************************
-// $Id: msp_main.c,v 1.8 2003-04-29 11:07:46 peter Exp $
+// $Id: msp_main.c,v 1.9 2003-04-30 09:55:57 peter Exp $
 //  MSP-FET430X110 Demo - Demonstrate LPM3, WDT Interrupt   
 //
 //  Description; This program operates MSP430 normally in LPM3, pulsing P1.0 
@@ -39,7 +39,7 @@ extern int mode_timer;
 	//это врем€ по гринвичу
 extern time_in GlobalTime;
 	//если не 0, то запускаем€ на полной скорости
-extern int run_full_speed;
+//extern int run_full_speed;
 	//переключаемс€ на скоростной режим таймера
 extern int switch_speed_timer;
 
@@ -187,7 +187,7 @@ void main(void)
  WDTCTL=WDTPW|WDTHOLD;  		// Stop WDT
 	// конфигурируем ноги ввода вывода
  set_pin_directions();
- run_full_speed=0;
+// run_full_speed=0;
  current_speed=0;
  switch_speed_timer=0;
  mode_timer=0;
@@ -206,6 +206,11 @@ void main(void)
 //запускаем таймер A и часы от него
  init_timer_a();
  init_adc();
+
+ if (current_speed==0 && power_good()  && run_xt2()){
+  switch_xt2();
+  }
+
   _EINT();                              // Enable interrupts
   
   while(1)
@@ -215,9 +220,6 @@ void main(void)
     _BIS_SR(CPUOFF);                 // входим в режим сп€чки
     P1OUT |= 0x01;                      // Set P1.0 LED on
     tick_timer();
-    if (current_speed==0 && run_full_speed  && run_xt2()){
-     switch_xt2();
-     }
     switch(mode_work){
      case 0: //вывод на экран времени (минуты секунды)
       if ((time_to_change+5)<GlobalTime){

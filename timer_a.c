@@ -1,4 +1,4 @@
-// $Id: timer_a.c,v 1.1 2003-04-03 07:27:31 peter Exp $
+// $Id: timer_a.c,v 1.2 2003-04-30 09:55:57 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -171,7 +171,6 @@ interrupt[TIMERA0_VECTOR] void timer_a_0 (void)
     counter_timer-=4;
     second_point^=0xFFFF;
     }
-   if (power_good()) run_full_speed=1;
    if (switch_speed_timer){
     mode_timer=1;
     TACTL&=~(MC0|MC1); //stop
