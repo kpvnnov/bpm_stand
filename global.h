@@ -1,4 +1,4 @@
-//$Id: global.h,v 1.20 2003-06-23 10:19:47 peter Exp $
+//$Id: global.h,v 1.21 2003-06-23 11:34:01 peter Exp $
 
 
 #define DEBUG_SERIAL
@@ -82,6 +82,7 @@ void update_diplay(void);
 void work_with_serial_rec(void);
 int hold_packet(void);
 void set_adc(int ch);
+void set_adc_temperature(void);
 
 
 

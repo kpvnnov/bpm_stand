@@ -1,4 +1,4 @@
-// $Id: uart_s.c,v 1.6 2003-06-23 10:19:47 peter Exp $
+// $Id: uart_s.c,v 1.7 2003-06-23 11:34:01 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -51,6 +51,7 @@ extern unsigned int results0[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
 extern unsigned int results1[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
 extern unsigned int results2[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
 extern unsigned int results3[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+extern unsigned int results4[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
 //extern unsigned int results4[ADC_FIFO_RCV_LEN];
 //extern unsigned int results5[ADC_FIFO_RCV_LEN];
 //extern unsigned int results6[ADC_FIFO_RCV_LEN];
@@ -170,6 +171,7 @@ _________________________________________________________________
     .....
     слово - значение опорного канала со смещением (N-1)
     слово - значение исследуемого канала со смещением (N-1)
+    слово - значение температуры (суммированные 16 отсчетов)
     1 байт - зарезервировано
     общее количество данных 2+N*2+1 байта
 _________________________________________________________________
@@ -259,7 +261,7 @@ _________________________________________________________________
 #define  DATA5PACKET     (SIZE_STAT*2+6)
 #define  DATA6PACKET     (SIZE_STAT1*2+6)
 #define  DATA7PACKET     (32+6)
-#define  DATAxAPACKET    (2+4*2+6)
+#define  DATAxAPACKET    (2+4*2+2+6)
 
 
 #define  ESCAPE		0x7D
@@ -559,6 +561,7 @@ u16* t_p;
  *t_p++=results1[info];
  *t_p++=results2[info];
  *t_p++=results3[info];
+ *t_p++=results4[info];
 
 	//помещаем в пакет его длину (без завершающего EOFPACKET)
  packets[shift_fifo-LENPACKET]=DATAxAPACKET;

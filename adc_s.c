@@ -1,5 +1,5 @@
 
-// $Id: adc_s.c,v 1.5 2003-06-23 10:19:47 peter Exp $
+// $Id: adc_s.c,v 1.6 2003-06-23 11:34:01 peter Exp $
 #include  <msp430x14x.h>
 #include "global.h"
 
@@ -19,6 +19,7 @@ unsigned int results0[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
 unsigned int results1[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
 unsigned int results2[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
 unsigned int results3[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
+unsigned int results4[ADC_FIFO_RCV_LEN*SIZE_OF_ADC_DUMP];
 unsigned int results[ADC_FIFO_RCV_LEN];
                                         
 unsigned int current_level;
@@ -103,6 +104,29 @@ HOLD_TIME_IRQ()
     sum+=ADC12MEM13;
     sum+=ADC12MEM15;
     results3[sh]=sum;
+    rotate_channel++;
+    set_adc_temperature();
+    SUM_TIME_IRQ_NOSLEEP();
+    break;
+   case 2:
+    sum=ADC12MEM0;
+    sum+=ADC12MEM2;
+    sum+=ADC12MEM4;
+    sum+=ADC12MEM6;
+    sum+=ADC12MEM8;
+    sum+=ADC12MEM10;
+    sum+=ADC12MEM12;
+    sum+=ADC12MEM14;
+
+    sum+=ADC12MEM1;
+    sum+=ADC12MEM3;
+    sum+=ADC12MEM5;
+    sum+=ADC12MEM7;
+    sum+=ADC12MEM9;
+    sum+=ADC12MEM11;
+    sum+=ADC12MEM13;
+    sum+=ADC12MEM15;
+    results4[sh]=sum;
     results[adc_rcv_fifo_end & (ADC_FIFO_RCV_LEN-1)]=0x8000|(first_channel&0x1F);
     adc_rcv_fifo_end++;
     rotate_channel=0;
@@ -229,6 +253,31 @@ u16 work_with_adc_put(void){
    }
 
   return 0;
+}
+
+
+void set_adc_temperature(void){
+ ADC12CTL0 &= ~ENC;                     // Enable conversions
+
+ ADC12MCTL0 = INCH_10+SREF_1;      // ref+=AVcc, channel = A10, end seq.
+ ADC12MCTL1 = INCH_10+SREF_1;      // ref+=AVcc, channel = A10, end seq.
+ ADC12MCTL2 = INCH_10+SREF_1;      // ref+=AVcc, channel = A10, end seq.
+ ADC12MCTL3 = INCH_10+SREF_1;      // ref+=AVcc, channel = A10, end seq.
+ ADC12MCTL4 = INCH_10+SREF_1;      // ref+=AVcc, channel = A10, end seq.
+ ADC12MCTL5 = INCH_10+SREF_1;      // ref+=AVcc, channel = A10, end seq.
+ ADC12MCTL6 = INCH_10+SREF_1;      // ref+=AVcc, channel = A10, end seq.
+ ADC12MCTL7 = INCH_10+SREF_1;      // ref+=AVcc, channel = A10, end seq.
+ ADC12MCTL8 = INCH_10+SREF_1;      // ref+=AVcc, channel = A10, end seq.
+ ADC12MCTL9 = INCH_10+SREF_1;      // ref+=AVcc, channel = A10, end seq.
+ ADC12MCTL10= INCH_10+SREF_1;      // ref+=AVcc, channel = A10, end seq.
+ ADC12MCTL11= INCH_10+SREF_1;      // ref+=AVcc, channel = A10, end seq.
+ ADC12MCTL12= INCH_10+SREF_1;      // ref+=AVcc, channel = A10, end seq.
+ ADC12MCTL13= INCH_10+SREF_1;      // ref+=AVcc, channel = A10, end seq.
+ ADC12MCTL14= INCH_10+SREF_1;      // ref+=AVcc, channel = A10, end seq.
+ ADC12MCTL15= INCH_10+SREF_1+EOS;      // ref+=AVcc, channel = A10, end seq.
+
+ ADC12IE = 1<<15;                       // Enable ADC12IFG.3
+ ADC12CTL0 |= ENC;                     // Enable conversions
 }
 
 void set_adc(int ch){
