@@ -1,4 +1,4 @@
-// $Id: uart_p.h,v 1.3 2004-03-18 16:51:15 peter Exp $
+// $Id: uart_p.h,v 1.4 2004-03-31 16:37:39 peter Exp $
 
 struct que{
  u8 busy;    //место занято. 
@@ -22,6 +22,7 @@ void fill_date_packet(u8 type_packet, u16 num_packet);
 #define NOTSENDED 2     //неотправленный пакет
 #define WAIT_ACK  3     //ожидающий подтверждения
 #define PACKREC   4     //принятый пакет
+#define RECEIVED  5     //принятый и обработанный пакет
 
 
 #define  CRCPACKET      2       //смещение (с конца) положения в пакете CRC
@@ -90,8 +91,14 @@ void fill_date_packet(u8 type_packet, u16 num_packet);
 #define  DATA1DPACKET   5
 #define  DATA1EPACKET   5
 #define  DATA1FPACKET   5
-#define  DATA20PACKET   5
-#define  DATA21PACKET   5
+
+#define  DATA20PACKET   (2+6)
+#define  ADDRESS_PACK20 (2+6)
+
+#define  DATA21PACKET   (2+SIZE_N_LOADER+6)
+#define  ADDRESS_PACK21 (2+SIZE_N_LOADER+6)
+#define  ADDRESS_PACK21_DATA (SIZE_N_LOADER+6)
+
 #define  DATA22PACKET   5
 #define  DATA23PACKET   5
 #define  DATA24PACKET   5

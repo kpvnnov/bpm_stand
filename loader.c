@@ -1,4 +1,4 @@
-// $Id: loader.c,v 1.3 2004-03-18 16:51:14 peter Exp $
+// $Id: loader.c,v 1.4 2004-03-31 16:37:39 peter Exp $
 #include  <msp430x14x.h>
 //типы переменных
 #include "type_def.h"
@@ -24,6 +24,8 @@ extern struct que queue[MAXQUE];
 
 //по какому порту работает загрузчик (1 или 2)
 #define COM_PORT        2
+
+#define MEMORY  ((u8*) 0x0)
 
 #pragma codeseg(LOADER_CODE)
 
@@ -222,13 +224,13 @@ u16 packet_hold;
    if (crc16(&packets[x*MAXPACKETLEN],queue[x].len)==0){ //сrc совпала?
     switch(packets[shift_fifo-TYPEPACKET]){
      case 0x1B: //данные для программирования
-      address=packets[shift_fifo-ADDRESS_PACK1B];
+      address=packets[shift_fifo-ADDRESS_PACK1B]+(packets[shift_fifo-ADDRESS_PACK1B+1]<<8);
       if (address<(sizeof(buffer_data)-SIZE_N_LOADER)){
        memcpy(&buffer_data[address],&packets[shift_fifo-ADDRESS_PACK1B_DATA],SIZE_N_LOADER);
        }
       break;
      case 0x1C: //запрос данных из промежуточного буфера
-      address=packets[shift_fifo-ADDRESS_PACK1C];
+      address=packets[shift_fifo-ADDRESS_PACK1C]+(packets[shift_fifo-ADDRESS_PACK1C+1]<<8);
       if ((packet_hold=make_packet())!=0){
        shift_fifo=packet_hold*MAXPACKETLEN;
        memcpy(&packets[shift_fifo-ADDRESS_PACK25_DATA],&buffer_data[address],SIZE_N_LOADER);
@@ -238,6 +240,14 @@ u16 packet_hold;
        }
       break;
      case 0x20: //запрос чтения флеш
+      address=packets[shift_fifo-ADDRESS_PACK20]+(packets[shift_fifo-ADDRESS_PACK20+1]<<8);
+      if ((packet_hold=make_packet())!=0){
+       shift_fifo=packet_hold*MAXPACKETLEN;
+       memcpy(&packets[shift_fifo-ADDRESS_PACK21_DATA],&MEMORY[address],SIZE_N_LOADER);
+       memcpy(&packets[shift_fifo-ADDRESS_PACK21],&address,2);
+       fill_date_packet(0x21,packet_hold);
+       queue[packet_hold-1].busy=NOTSENDED;
+       }
       break;
      case 0x22: //очистка сектора
       break;
