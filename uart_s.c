@@ -1,4 +1,4 @@
-// $Id: uart_s.c,v 1.8 2003-10-15 12:23:15 peter Exp $
+// $Id: uart_s.c,v 1.9 2003-10-15 16:07:58 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -41,6 +41,7 @@ extern u16 error_send_serial;
 extern u16 length_sended_2_fifo;
 extern u16 length_sended_2_fifo_max;
 extern u16 length_sended_2_fifo_min;
+extern u16 error_packets_crc;
 #endif //DEBUG_SERIAL
 
 extern u16 current_rec_packet;
@@ -638,6 +639,7 @@ u16 shift_fifo;
     }
    else{ // crc не совпала
     queue[x].busy=FREEPLACE;
+    error_packets_crc++;
     }
    }
   }
@@ -685,6 +687,7 @@ int x;
   fifo_trn_depth=0;
   packet_in_fifo=0;
   packet_fifo_full=0;
+  error_packets_crc=0;
  #endif
 #endif //CABLE
 #ifdef STEND

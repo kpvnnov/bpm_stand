@@ -1,5 +1,5 @@
 //********************************************************
-// $Id: msp_main.c,v 1.23 2003-06-18 19:51:09 peter Exp $
+// $Id: msp_main.c,v 1.24 2003-10-15 16:07:57 peter Exp $
 //********************************************************
 
 //#include <msp430x11x1.h>
@@ -434,7 +434,7 @@ int i;
     #ifdef CABLE
      P1OUT |= 0x01;                      // Set P1.0 LED on
     #endif //
-    while(adc_rcv_fifo_start!=adc_rcv_fifo_end){
+    while((adc_rcv_fifo_start& (ADC_FIFO_RCV_LEN-1))!=(adc_rcv_fifo_end& (ADC_FIFO_RCV_LEN-1))){ //об€зательно написать оценку переполнени€
      if (work_with_adc_put()==0) break;
      }
     #ifdef CABLE
@@ -451,10 +451,10 @@ int i;
     #ifdef CABLE
      P1OUT |= 0x01;                      // Set P1.0 LED on
     #endif
-    while (stat_rcv_fifo_start!=stat_rcv_fifo_end){
+    while ((stat_rcv_fifo_start& (STAT_FIFO_RCV_LEN-1))!=(stat_rcv_fifo_end& (STAT_FIFO_RCV_LEN-1))){
      if (put_packet_type5()==0) break;
      }
-    while (stat1_rcv_fifo_start!=stat1_rcv_fifo_end){
+    while ((stat1_rcv_fifo_start& (STAT1_FIFO_RCV_LEN-1))!=(stat1_rcv_fifo_end& (STAT1_FIFO_RCV_LEN-1))){
      if (put_packet_type6()==0) break;
      }
     #ifdef CABLE

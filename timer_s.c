@@ -1,4 +1,4 @@
-// $Id: timer_s.c,v 1.6 2003-10-15 12:23:15 peter Exp $
+// $Id: timer_s.c,v 1.7 2003-10-15 16:07:58 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -35,6 +35,7 @@ extern u16 error_uart_depth;
 extern u16 error_send_serial;
 extern u16 length_sended_2_fifo_max;
 extern u16 length_sended_2_fifo_min;
+extern u16 error_packets_crc;
 #endif //DEBUG_SERIAL
 
 
@@ -493,6 +494,7 @@ HOLD_TIME_IRQ()
 
     *t_stat++=packet_in_fifo_max;
     packet_in_fifo_max=0;
+    *t_stat++=error_packets_crc;
 
     stat1_rcv_fifo_end++;
 

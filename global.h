@@ -1,4 +1,4 @@
-//$Id: global.h,v 1.22 2003-10-15 12:23:15 peter Exp $
+//$Id: global.h,v 1.23 2003-10-15 16:07:57 peter Exp $
 
 
 #define DEBUG_SERIAL
@@ -10,7 +10,7 @@
 //#define DISPLAY
 
 //количество каналов в мультиплексированном режиме
-#define  NUM_MULTICHANNEL 4
+#define  NUM_MULTICHANNEL 11
 
 
 
@@ -99,7 +99,7 @@ void set_adc_temperature(void);
 #define STAT_FIFO_RCV_LEN	8           /* size of fifo STAT buffer   */
 #define STAT1_FIFO_RCV_LEN	8           /* size of fifo STAT buffer   */
 #define SIZE_STAT	9
-#define SIZE_STAT1	8
+#define SIZE_STAT1	9
 
 #define  ALL_JOB	0
 #define  DISPLAY_JOB	1

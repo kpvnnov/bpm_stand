@@ -1,4 +1,4 @@
-// $Id: uart.c,v 1.21 2003-10-15 12:23:15 peter Exp $
+// $Id: uart.c,v 1.22 2003-10-15 16:07:58 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -35,6 +35,7 @@ u16 error_send_serial;
 u16 length_sended_2_fifo;
 u16 length_sended_2_fifo_max;
 u16 length_sended_2_fifo_min;
+u16 error_packets_crc;
 #endif //DEBUG_SERIAL
 
 u16 current_rec_packet;
@@ -266,6 +267,8 @@ HOLD_TIME_IRQ()
   #ifdef DEBUG_SERIAL
   if (fifo_trn_depth) {error_uart_depth++;fifo_trn_depth=0;}
   #endif
+  //фифошка обнулилась - хватит спать, надо передавать данные
+  _BIC_SR_IRQ(CPUOFF);               // Clear LPM0, SET BREAKPOINT HERE
   }
  #ifdef CABLE
   P1OUT = temp_led;                     // return led state
