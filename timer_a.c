@@ -1,4 +1,4 @@
-// $Id: timer_a.c,v 1.15 2003-06-02 19:58:54 peter Exp $
+// $Id: timer_a.c,v 1.16 2003-06-03 16:50:21 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -318,7 +318,9 @@ HOLD_TIME_IRQ()
      }
 	//сброс WatchDog
     CLEAR_DOG();	
+    #ifdef DISPLAY
     show_display();
+    #endif //display
     update_display=1;
     sub_counter_timer++;  
     if (sub_counter_timer>15){

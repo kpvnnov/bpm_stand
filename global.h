@@ -1,4 +1,4 @@
-//$Id: global.h,v 1.15 2003-06-02 19:58:54 peter Exp $
+//$Id: global.h,v 1.16 2003-06-03 16:50:21 peter Exp $
 
 
 #define DEBUG_SERIAL
@@ -7,7 +7,7 @@
 //#define CLEAR_DOG()	WDTCTL=(WDTCTL&0x00FF)+WDTPW+WDTCNTCL
 #define CLEAR_DOG()	WDTCTL=WDTPW|WDTHOLD
 
-
+//#define DISPLAY
 
 
 
