@@ -1,4 +1,4 @@
-// $Id: timer_a.c,v 1.4 2003-05-13 15:11:43 peter Exp $
+// $Id: timer_a.c,v 1.5 2003-05-16 14:57:05 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -11,6 +11,7 @@ extern unsigned int results[];         // Needs to be global in this example
 
 int gradus_to_show;
 int volt_to_show;
+int capture_timer;
 
 int change_to_mode;
 	// 0 - ACLK 1 - SMCLK
@@ -184,15 +185,19 @@ interrupt[TIMERA0_VECTOR] void timer_a_0 (void)
    break; //case 0
   case 1: //1400 Гц (счет таймера от SMCLK)
    //  BCSCTL2=(BCSCTL2&(~(SELM0)))|SELM1;
+   if (capture_timer>=14){
+    capture_timer-=14;
+    if (end_adc_conversion){
+     end_adc_conversion=0;
+     ADC12CTL0 |= ADC12SC;                 // Start conversion
+     }
+    else {error_adc=1;}
+    }
+   capture_timer++;
    if (refresh_timer>139){
     show_display(0x00);
     refresh_timer-=140;
 
-   if (end_adc_conversion){
-    end_adc_conversion=0;
-    ADC12CTL0 |= ADC12SC;                 // Start conversion
-    }
-   else {error_adc=1;}
 
     }
    refresh_timer++;

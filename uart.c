@@ -1,4 +1,4 @@
-// $Id: uart.c,v 1.6 2003-05-14 14:18:31 peter Exp $
+// $Id: uart.c,v 1.7 2003-05-16 14:57:05 peter Exp $
 #include  <msp430x14x.h>
 #include  <string.h>
 #include "global.h"
@@ -119,20 +119,20 @@ const unsigned int  CrcTable16[256]={
     0x6e17,  0x7e36,  0x4e55,  0x5e74,  0x2e93,  0x3eb2,  0x0ed1,  0x1ef0};
 //0x6e17,  0x7e36,  0x4e55,  0x5e74,  0x2e93,  0x3eb2,  0x0ed1,  0x1ef0
 
-
+/*
 unsigned int  update_crc_16(unsigned char octet,unsigned int crc)
 {
  return  CrcTable16[((crc>>8) ^ octet) & 0xFF] ^ ((crc<<8) & 0xFF00);
 
 }
-
+*/
 
 unsigned int crc16(void* massiv, unsigned int len){
 unsigned int crc=0x0000;
 unsigned int c;
 unsigned char*m=(unsigned char*)massiv;
 for (c=0;c<len;c++)
- crc=update_crc_16(m[c],crc);
+ crc=CrcTable16[((crc>>8) ^ m[c]) & 0xFF] ^ ((crc<<8) & 0xFF00); 
 return crc;
 }
 

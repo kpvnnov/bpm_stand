@@ -1,5 +1,5 @@
 
-// $Id: adc.c,v 1.4 2003-05-14 14:18:30 peter Exp $
+// $Id: adc.c,v 1.5 2003-05-16 14:57:04 peter Exp $
 #include  <msp430x14x.h>
 #include "global.h"
 
@@ -42,7 +42,7 @@ void init_adc(void){
   ADC12MCTL1 = INCH_1;                  // ref+=AVcc, channel = A1
   ADC12MCTL2 = INCH_2;                  // ref+=AVcc, channel = A2    
   ADC12MCTL3 = INCH_3;                  // ref+=AVcc, channel = A3, end seq.
-  ADC12MCTL4 = INCH_10+SREF_1+EOS;      // ref+=AVcc, channel = A3, end seq.
+  ADC12MCTL4 = INCH_10+SREF_1+EOS;      // ref+=AVcc, channel = A10, end seq.
   ADC12IE = 0x10;                       // Enable ADC12IFG.3
   ADC12CTL0 |= ENC;                     // Enable conversions
 
@@ -58,16 +58,16 @@ void work_with_adc_put(void){
 int p;
 
  if (adc_rcv_fifo_start==adc_rcv_fifo_end) return ;
- if (counter++>=10){
+ if (counter++>=20){
   counter=0;
-  p=(adc_rcv_fifo_start++ & (ADC_FIFO_RCV_LEN-1))<<3;
-//отладка
-  results[p]='0';
-  results[p]='1';
-  results[p]='2';
-//отладка
-  put_packet_type3((u8*)&results[p]);
   put_packet_type4();
   }
- else adc_rcv_fifo_start++;
+  p=(adc_rcv_fifo_start++ & (ADC_FIFO_RCV_LEN-1))<<3;
+//отладка
+//  results[p]='0';
+//  results[p]='1';
+//  results[p]='2';
+//отладка
+  put_packet_type3((u8*)&results[p]);
+
 }
