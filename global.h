@@ -1,4 +1,4 @@
-//$Id: global.h,v 1.2 2003-04-03 07:27:31 peter Exp $
+//$Id: global.h,v 1.3 2003-05-07 14:45:33 peter Exp $
 typedef unsigned char  u08;
 typedef unsigned char  u8;
 typedef          char  s08;
@@ -46,3 +46,15 @@ void redraw_display_voltage(int force);
 void redraw_display_celciy(int force);
 void cs_on_display(void);
 void cs_off_display(void);
+int power_good(void);
+void work_with_display(void);
+void work_serial_transmit(void);
+void work_with_serial(void);
+unsigned int crc16(void*,int);
+u16 send_serial_massiv(u8* data,u16 len);
+void work_with_adc_put(void);
+u8 put_packet_type3(u8 *info);
+
+
+
+

@@ -1,5 +1,5 @@
 //******************************************************************************
-// $Id: msp_main.c,v 1.9 2003-04-30 09:55:57 peter Exp $
+// $Id: msp_main.c,v 1.10 2003-05-07 14:45:33 peter Exp $
 //  MSP-FET430X110 Demo - Demonstrate LPM3, WDT Interrupt   
 //
 //  Description; This program operates MSP430 normally in LPM3, pulsing P1.0 
@@ -29,7 +29,7 @@
 
 // АЦП
 extern int end_adc_conversion;
-extern unsigned int results[5];         // Needs to be global in this example
+//extern unsigned int results[5];         // Needs to be global in this example
 extern int error_adc;
 
 //таймер
@@ -180,6 +180,7 @@ switch_speed_timer=1;
 
 long time_to_change;
 int mode_work;
+
 void main(void)
 { 
 //int i;
@@ -220,36 +221,9 @@ void main(void)
     _BIS_SR(CPUOFF);                 // входим в режим спячки
     P1OUT |= 0x01;                      // Set P1.0 LED on
     tick_timer();
-    switch(mode_work){
-     case 0: //вывод на экран времени (минуты секунды)
-      if ((time_to_change+5)<GlobalTime){
-       change_to_mode++;
-       mode_work++;
-       time_to_change=GlobalTime;
-       }
-      break;
-     case 1: //вывод на экран времени (часы минуты)
-      if ((time_to_change+5)<GlobalTime){
-       change_to_mode++;
-       mode_work++;
-       time_to_change=GlobalTime;
-       }
-      break;
-     case 2: //вывод на экран напряжения (0-4095)
-      if ((time_to_change+5)<GlobalTime){
-       change_to_mode++;
-       mode_work++;
-       time_to_change=GlobalTime;
-       }
-      break;
-     case 3: //вывод на экран температуры (градусы цельсия)
-      if ((time_to_change+5)<GlobalTime){
-       change_to_mode=0;
-       mode_work=0;
-       time_to_change=GlobalTime;
-       }
-      break;
-     }
+    work_with_display();
+    work_with_serial();
+    work_serial_transmit();
 //    P1OUT &= ~0x01;                     // Reset P1.0 LED off
   }
 

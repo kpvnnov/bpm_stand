@@ -1,5 +1,6 @@
-// $Id: uart.c,v 1.3 2003-04-30 09:55:57 peter Exp $
+// $Id: uart.c,v 1.4 2003-05-07 14:45:33 peter Exp $
 #include  <msp430x14x.h>
+#include  <string.h>
 #include "global.h"
 
 
@@ -51,33 +52,86 @@ volatile unsigned int  asp_rcv_fifo_end;        /* serial receive flash buffer e
 u8    asp_rcv_fifo_buf[SERIAL_FIFO_RCV_LEN];           /* storage for receive transmit  buffer      */
 
 #define NOTSENDED 2
+#define WAIT_ACK  3
+#define FREEPLACE 0
+#define PACKBUSY  1
 struct que{
- u8 busy;    //место занято. 0 - свободно, 1 - занято, 2 не передано
+ u8 busy;    //место занято. 
+		//0 - свободно
+		//1 - занято
+		//2 не передано (необходимо подтверждение)
+		//3 передано (ждем подтверждения)
+		//4 не передано (подтверждения не потребуется)
  u8 numeric; //порядковый номер пакета
+ u8 len;
 };
 
-que queue[MAXQUE];
+struct que queue[MAXQUE];
 u8 packets[MAXQUE*MAXPACKETLEN];
 
 u8 counts_packet; //порядковый номер пакета
 
+int hold_packet(void){
+int x;
+ for (x=0;x<MAXQUE;x++){
+  switch(queue[x].busy){
+   case FREEPLACE:
+    queue[x].busy=PACKBUSY;
+    return x;
+//    break;
+   }
+  }
+return MAXQUE;
+}
 
 u8 put_packet_type3(u8 *info){
 int n;
+int crc;
  while ((n=hold_packet())==MAXQUE) ; //захватываем свободный пакет
- memcpy(&packets[(n+1)*MAXPACKETLEN-DATA3ACKET],info,SIZEDATA3); //копируем туда данные для пакета
+ memcpy(&packets[(n+1)*MAXPACKETLEN-DATA3PACKET],info,SIZEDATA3); //копируем туда данные для пакета
  packets[(n+1)*MAXPACKETLEN-LENPACKET]=DATA3PACKET;
  packets[(n+1)*MAXPACKETLEN-NUMPACKET]=counts_packet++;
  packets[(n+1)*MAXPACKETLEN-TYPEPACKET]=0x03;
- (u16)packets[(n+1)*MAXPACKETLEN-CRCPACKET]=0xFFFF;
- (u16)packets[(n+1)*MAXPACKETLEN-CRCPACKET]=crc16(&packets[(n+1)*MAXPACKETLEN-DATA3ACKET],DATA3PACKET);
+ packets[(n+1)*MAXPACKETLEN-CRCPACKET]=0xFF;
+ packets[(n+1)*MAXPACKETLEN-CRCPACKET+1]=0xFF;
+ crc=crc16(&packets[(n+1)*MAXPACKETLEN-DATA3PACKET],DATA3PACKET);
+ packets[(n+1)*MAXPACKETLEN-CRCPACKET]=crc;
+ packets[(n+1)*MAXPACKETLEN-CRCPACKET+1]=crc<<8;
  queue[n].numeric=packets[(n+1)*MAXPACKETLEN-NUMPACKET];
+ queue[n].len=DATA3PACKET;
  queue[n].busy=NOTSENDED;
 return 1;
 }
 
+void work_with_serial(void){
+ work_serial_transmit();
+}
+
+void send_full_massiv(u8* data,u16 len){
+u16 ostatok;
+ while ( (ostatok=send_serial_massiv(data,len))!=0) {
+  data+=(len-ostatok);
+  len=ostatok;
+  }
+}
+
+void work_serial_transmit(void){
+int x;
+for (x=0;x<MAXQUE;x++){
+ switch(queue[x].busy){
+  case NOTSENDED:
+//отладка   queue[x].busy=WAIT_ACK;
+   queue[x].busy=FREEPLACE; 	//для отладки
+   send_full_massiv(&packets[(x+1)*MAXPACKETLEN-queue[x].len],queue[x].len);
+   return;
+//   break;
+  }
+ }
+}
+
 
 void init_uart0(void){
+int x;
   UCTL0 = CHAR;                         // 8-bit character
   UTCTL0 = SSEL0;                       // UCLK = ACLK
   UBR00 = 0x45;                         // 8MHz 115200
@@ -87,6 +141,9 @@ void init_uart0(void){
   IE1 |= URXIE0;                        // Enable USART0 RX interrupt
   P3SEL |= 0x30;                        // P3.4,5 = USART0 TXD/RXD
   P3DIR |= 0x10;                        // P3.4 output direction
+  for (x=0;x<MAXQUE;x++) queue[x].busy=FREEPLACE;
+
+
 }
 
 
@@ -96,7 +153,7 @@ void init_uart0(void){
 interrupt[UART0TX_VECTOR] void usart0_tx (void)
 {
  if (asp_trn_fifo_start!=asp_trn_fifo_end)
-  TXBUF0 =asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
+  TXBUF0 = asp_trn_fifo_buf[asp_trn_fifo_start++ & (SERIAL_FIFO_TRN_LEN-1)];
 }
 interrupt[UART0RX_VECTOR] void usart0_rx (void)
 {
@@ -137,6 +194,8 @@ u16 read_asp_rcv_fifo(void){
  if (asp_rcv_fifo_start==asp_rcv_fifo_end) return 0;
  return (asp_rcv_fifo_buf[asp_rcv_fifo_start++ & (SERIAL_FIFO_RCV_LEN-1)]|0x0100);
 }
+
+
 u16 send_serial_massiv(u8* data,u16 len){
 u16 counter;
 u16 counter1;
@@ -187,5 +246,4 @@ u8 write_asp_trn_fifo(u8 data_wr){
  enable_int_no_interrupt();
  return 1;
 }
-
 

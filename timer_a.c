@@ -1,4 +1,4 @@
-// $Id: timer_a.c,v 1.2 2003-04-30 09:55:57 peter Exp $
+// $Id: timer_a.c,v 1.3 2003-05-07 14:45:33 peter Exp $
 #include  <msp430x14x.h>
 #include <stdlib.h>
 #include "global.h"
@@ -7,7 +7,7 @@
 //ADC
 extern int end_adc_conversion;
 extern int error_adc;
-extern unsigned int results[5];         // Needs to be global in this example
+extern unsigned int results[];         // Needs to be global in this example
 
 int gradus_to_show;
 int volt_to_show;
@@ -33,6 +33,9 @@ int mode_display;
 time_in time_to_show;
 int symbl[4];
 int displ[4];
+
+extern int mode_work;
+extern long time_to_change;
 
 
 
@@ -500,7 +503,38 @@ void redraw_display_celciy(int force){
    }
 }
 
-
+void work_with_display(void){
+    switch(mode_work){
+     case 0: //вывод на экран времени (минуты секунды)
+      if ((time_to_change+5)<GlobalTime){
+       change_to_mode++;
+       mode_work++;
+       time_to_change=GlobalTime;
+       }
+      break;
+     case 1: //вывод на экран времени (часы минуты)
+      if ((time_to_change+5)<GlobalTime){
+       change_to_mode++;
+       mode_work++;
+       time_to_change=GlobalTime;
+       }
+      break;
+     case 2: //вывод на экран напряжения (0-4095)
+      if ((time_to_change+5)<GlobalTime){
+       change_to_mode++;
+       mode_work++;
+       time_to_change=GlobalTime;
+       }
+      break;
+     case 3: //вывод на экран температуры (градусы цельсия)
+      if ((time_to_change+5)<GlobalTime){
+       change_to_mode=0;
+       mode_work=0;
+       time_to_change=GlobalTime;
+       }
+      break;
+     }
+}
 
 // WDT
 
